@@ -1,0 +1,18 @@
+***HUMAN LANGUAGE***
+Writing a presentation to begin creating my own Detections repository to collect all basic and advanced detection rules based on MITRE and MY CREATIVITY :)
+
+***SIGMA***
+title:  Detection Rules Repository - Introduction
+author:  Alessandro Zanotta
+tags:
+  -  Detections_Alpha.introduction
+logsource:
+  product:  GitHub
+  category:  RepositoryPresentation
+detection:
+  selection:
+    github.com|endswith:
+      - '\ZanoSec\/Detections_Alpha\/new\/main'
+    Detections_Alpha|equal:
+      - 'Introduction'
+  condition: selection
