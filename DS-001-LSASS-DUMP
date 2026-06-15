@@ -1,0 +1,82 @@
+-TA0006 - Credential Access
+  -- T1003 - OS Credential Dumping
+        Adversaries may attempt to dump credentials to obtain account login and credential material, normally in the form of a hash or a clear text password. 
+        Credentials can be obtained from OS caches, memory, or structures.
+        Credentials can then be used to perform Lateral Movement and access restricted information.
+
+
+
+
+# THREAT MODEL
+
+Attacker Goal:  
+  - Obtain credentials from the compromised host.
+
+Prerequisites:
+  - Code execution
+  - Local Administrator privileges
+
+Potential Impact:
+  - Privilege Escalation
+  - Lateral Movement
+  - Domain Compromise
+
+
+#TELEMETRY
+  - Sysmon 1
+    - Event ID 1
+      -- Process Creation
+    #Example: procdump.exe -ma lsass.exe
+
+  - Sysmon 10
+    - Event ID 10
+      -- Process Access
+    #Example: SourceImage: procdump.exe  TargetImage: lsass.exe
+
+
+# DETECTION STRATEGY
+  - Detect processes attempting to access lsass.exe memory with high privilege access rights.
+
+
+#SIGMA
+
+title: Suspicious Access To LSASS
+
+id: xxxxxxxx
+
+status: experimental
+
+logsource:
+  product: windows
+  category: process_access
+
+detection:
+  selection:
+    TargetImage|endswith:
+      - '\lsass.exe'
+
+  condition: selection
+
+level: high
+
+tags:
+  - attack.credential_access
+  - attack.t1003.001
+
+#LAB
+  Windows VM + Sysmon + Event Viewer
+
+#Validation Method
+
+  - Atomic Red Team
+  - Technique: T1003.001
+
+#Observed Events
+  - Event ID: 10
+  - Source Process: <process>
+  - Target Process: lsass.exe
+
+#Known False Positives
+  - EDR Agent
+  - Antivirus Agent
+  - Microsoft Defender
