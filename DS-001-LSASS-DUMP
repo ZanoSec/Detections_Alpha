@@ -18,41 +18,39 @@
       Lateral Movement
       Domain Compromise
 
-#TELEMETRY
+# TELEMETRY SOURCES
   - Sysmon Event ID 1
-      -- Process Creation
-      -- Relevant Fields:
-          --- Image
-          --- CommandLine
-          --- ParentImage
-      * Example:
-          ** Image: procdump.exe
-          ** CommandLine: procdump.exe -ma lsass.exe
-          ** ParentImage: cmd.exe
+  - Sysmon Event ID 10
+  - Sysmon Event ID 11
+
+#TELEMETRY
   - Sysmon Event ID 10
       -- Process Access
       -- Relevant Fields:
-          --- SourceProcessGUID
+          --- SourceProcessGuid
           --- SourceImage
           --- TargetImage
           --- GrantedAccess
       * Example:
+          ** SourceProcessGuid: {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
           ** SourceImage: procdump.exe
           ** TargetImage: lsass.exe
           ** GrantedAccess: 0x1FFFFF
   - Sysmon Event ID 11
-      -- File Create
-      -- Relevant Fields:
-          --- SourceProcessGUID
-          --- TargetFilename
-          --- Image
+    -- File Create
+    -- Relevant Fields:
+        --- ProcessGuid
+        --- TargetFilename
+        --- Image
       * Example:
+          ** ProcessGuid: {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
           ** Image: procdump.exe
           ** TargetFilename: C:\Temp\lsass.dmp
       * Suspicious Filenames:
-          ** lsass.dmp
-          ** lsass*.dmp
-          ** *.dmp
+        ** lsass.dmp
+        ** lsass*.dmp
+      * Additional Hunting:
+        ** *.dmp
 
 # CORRELATION LOGIC
   - Objective:
@@ -71,7 +69,7 @@
       --- Sysmon Event ID 11
         ---- File creation by the same process
     -- Correlation Fields:
-      --- SourceProcessGUID (Event ID 10)
+      --- SourceProcessGuid (Event ID 10)
       --- ProcessGuid (Event ID 11)
     - Time Window:
       -- Within 5 minutes
@@ -151,7 +149,7 @@
         - Incident Response tools
         - Memory forensic tools
       
-      level: high
+      level: medium
       
       tags:
         - attack.credential_access
@@ -160,15 +158,43 @@
     
     } //Windows
 
+# LEVEL CONSIDERATIONS
+  The Sigma rule alone provides medium-confidence detection.
+  High-confidence detection is achieved through SIEM-side correlation as described in the Correlation Logic section.
+  Consequently, the Sigma rule severity is Medium while the correlated alert severity is High.
+
 # IMPLEMENTATION NOTES
-  The Sigma rule represents the initial LSASS access detection.
-  Final alert generation should be performed through SIEM-side correlation between Sysmon Event ID 10 (Process Access) and Sysmon Event ID 11 (File Create) using ProcessGuid correlation within a 5-minute time window (CORRELATION LOGIC)
+  The Sigma rule represents the initial LSASS memory access detection.
+  High-confidence alert generation should be performed through SIEM-side correlation between:
+    - Sysmon Event ID 10 (Process Access)
+    - Sysmon Event ID 11 (File Create)
+  using:
+    - SourceProcessGuid (Event ID 10)
+    - ProcessGuid (Event ID 11) 
+  correlation within a 5-minute time window as described in the Correlation Logic section.
+
+# ALERT DEFINITION
+  - Alert Name:
+    -- Potential LSASS Credential Dumping
+  - Severity:
+    -- High
+  - Trigger:
+    -- Sysmon Event ID 10 (LSASS access)
+       AND
+       Sysmon Event ID 11 (File creation)
+    -- Correlation:
+       SourceProcessGuid (Event ID 10) matches ProcessGuid (Event ID 11)
+    -- Time Window:
+       Within 5 minutes
+  - Confidence:
+    -- High
 
 # DETECTION COVERAGE
   - Detected:
     -- ProcDump
     -- rundll32 + comsvcs.dll MiniDump
     -- Similar dump-to-disk techniques
+    -- Processes opening LSASS memory and writing dump files to disk
   - Potential Gaps:
     -- In-memory credential extraction
     -- PPL bypass techniques
