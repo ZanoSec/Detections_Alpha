@@ -1,6 +1,6 @@
 -TA0006 - Credential Access
   -- T1003 - OS Credential Dumping
-    --- T1003.001 - OS Credential Dumping: LSASS Memory
+    --- T1003.001 - LSASS Memory
 
 # THREAT DESCRIPTION
   Adversaries may attempt to dump credentials to obtain account login and credential material, normally in the form of a hash or a clear text password. 
@@ -13,7 +13,7 @@
 
   - Prerequisites:
       Code execution
-      Local Administrator privileges
+      Administrative privileges
 
   - Potential Impact:
       Privilege Escalation
@@ -27,14 +27,18 @@
 
   - Sysmon Event ID 10
       Process Access
-        *Example: SourceImage: procdump.exe  TargetImage: lsass.exe
+      GrantedAccess: 0x1FFFFF
+        *Example: 
+          ** SourceImage: procdump.exe  
+          ** TargetImage: lsass.exe
+          ** GrantedAccess: 0x1FFFFF
 
   - Sysmon Event ID 11
       File Create
         *Example: lsass.dmp //File dump
    
 # DETECTION STRATEGY
-  Detect non-whitelisted processes obtaining high-privilege access to lsass.exe memory, potentially associated with credential dumping activity.
+  Detect non-whitelisted processes obtaining high-privilege access to lsass.exe memory, potentially indicating credential dumping activity.
 
 
 #SIGMA
@@ -63,9 +67,10 @@
             - SourceImage|endswith:
               -- '\MsMpEng.exe'
               -- '\SenseIR.exe'
+              -- '\csagent.exe'
           - condition: selection_target and selection_access and not filter_legit
 
-          severity: high
+          level: high
           tags:
             - attack.credential_access
             - attack.t1003.001
@@ -80,6 +85,7 @@
         -- Event ID: 10
         -- Source Process: <process>
         -- Target Process: lsass.exe
+        -- GrantedAccess: <value>
       - Known False Positives
         -- Microsoft Defender
         -- CrowdStrike Falcon
