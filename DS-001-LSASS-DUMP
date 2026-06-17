@@ -23,7 +23,7 @@
   - Sysmon Event ID 10
   - Sysmon Event ID 11
 
-#TELEMETRY
+# DETECTION TELEMETRY
   - Sysmon Event ID 10
       -- Process Access
       -- Relevant Fields:
@@ -97,7 +97,7 @@
     - '0x1010' //PROCESS_VM_READ + PROCESS_QUERY_INFORMATION
   - Correlation between Sysmon Event ID 10 and Event ID 11 significantly increases detection fidelity.
   - The same process must access lsass.exe and subsequently create a file within the defined time window.
-  - Correlation is performed using SourceProcessGUID (Event ID 10) and ProcessGuid (Event ID 11).
+  - Correlation is performed using SourceProcessGuid (Event ID 10) and ProcessGuid (Event ID 11).
   - File names may vary and should not be considered the primary detection criterion.
 
 #SIGMA
