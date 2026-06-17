@@ -10,13 +10,11 @@
 # THREAT MODEL
   - Attacker Goal:  
       Obtain credentials from the compromised host
-
   - Prerequisites:
       Code execution
-      Administrative privileges
-
+      Administrative or SYSTEM privileges
   - Potential Impact:
-      Privilege Escalation
+      Credential Theft
       Lateral Movement
       Domain Compromise
 
