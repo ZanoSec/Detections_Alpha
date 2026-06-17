@@ -106,7 +106,7 @@
 
   - Windows
     {
-      title: Suspicious Access To LSASS
+      title: LSASS Memory Access With High Privilege Rights
       id: DS-001-LSASS-DUMP
       status: experimental
       
@@ -159,3 +159,17 @@
         - attack.t1003.001
     
     } //Windows
+
+# IMPLEMENTATION NOTES
+  The Sigma rule represents the initial LSASS access detection.
+  Final alert generation should be performed through SIEM-side correlation between Sysmon Event ID 10 (Process Access) and Sysmon Event ID 11 (File Create) using ProcessGuid correlation within a 5-minute time window (CORRELATION LOGIC)
+
+# DETECTION COVERAGE
+  - Detected:
+    -- ProcDump
+    -- rundll32 + comsvcs.dll MiniDump
+    -- Similar dump-to-disk techniques
+  - Potential Gaps:
+    -- In-memory credential extraction
+    -- PPL bypass techniques
+    -- Evasion techniques not generating Event ID 11
