@@ -22,13 +22,16 @@
 
 #TELEMETRY
   - Sysmon Event ID 1
-      Process Creation
+      -- Process Creation
         *Example: procdump.exe -ma lsass.exe
 
   - Sysmon Event ID 10
-      Process Access
-      GrantedAccess: 0x1FFFFF
-        *Example: 
+      -- Process Access
+      -- Relevant Fields:
+          --- SourceImage
+          --- TargetImage
+          --- GrantedAccess
+      * Example: 
           ** SourceImage: procdump.exe  
           ** TargetImage: lsass.exe
           ** GrantedAccess: 0x1FFFFF
@@ -40,60 +43,72 @@
 # DETECTION STRATEGY
   Detect non-whitelisted processes obtaining high-privilege access to lsass.exe memory, potentially indicating credential dumping activity.
 
+# DETECTION LOGIC NOTES
+  - GrantedAccess values represent the access rights requested against the target process.
+  - High-privilege values such as 0x1FFFFF, 0x143A, 0x1438, 0x1410 and 0x1010 are frequently associated with credential dumping tools.
+  - These values allow memory read and process interrogation capabilities commonly required to access LSASS memory.
+  - GrantedAccess values may vary depending on the Windows version, Sysmon version and tool implementation.
+  - Example:
+    - '0x1FFFFF' //PROCESS_ALL_ACCESS
+    - '0x143A' //PROCESS_QUERY_LIMITED_INFORMATION + PROCESS_QUERY_INFORMATION + PROCESS_CREATE_THREAD + PROCESS_VM_READ + PROCESS_VM_OPERATION + PROCESS_VM_WRITE
+    - '0x1438' //PROCESS_VM_READ + PROCESS_VM_OPERATION + PROCESS_VM_WRITE
+    - '0x1410' //PROCESS_QUERY_INFORMATION + PROCESS_VM_READ + PROCESS_VM_OPERATION
+    - '0x1010' //PROCESS_VM_READ + PROCESS_QUERY_INFORMATION
 
 #SIGMA
 
   - Windows
     {
-          title: Suspicious Access To LSASS
-          id: xxxxxxxx
-          status: experimental
-          logsource:
-            - product: windows
-            - category: process_access
-
-         detection:
-          - selection_target:
-            -- TargetImage|endswith:
-              --- '\lsass.exe'
-          - selection_access:
-            -- GrantedAccess:
-              --- '0x1FFFFF'
-              --- '0x143A'
-              --- '0x1438'
-              --- '0x1410'
-              --- '0x1010'
-          - filter_legit:
-            - SourceImage|endswith:
-              -- '\MsMpEng.exe'
-              -- '\SenseIR.exe'
-              -- '\csagent.exe'
-          - condition: selection_target and selection_access and not filter_legit
-
-          level: high
-          tags:
-            - attack.credential_access
-            - attack.t1003.001
-    
-      - Validation Method
-        -- Atomic Red Team
-        -- Manual Validation:
-          --- LAB -> Windows VM + Sysmon + Event Viewer
-            ---- ProcDump
-            ---- rundll32 + comsvcs.dll MiniDump
-      - Observed Events
-        -- Event ID: 10
-        -- Source Process: <process>
-        -- Target Process: lsass.exe
-        -- GrantedAccess: <value>
-      - Known False Positives
-        -- Microsoft Defender
-        -- CrowdStrike Falcon
-        -- SentinelOne
-        -- Cortex XDR
-        -- Sophos
-        -- Carbon Black
-        -- Incident Response tools
-        -- Memory forensic tools
+      title: Suspicious Access To LSASS
+      id: DS-001-LSASS-DUMP
+      status: experimental
+      
+      description: >
+        Detects non-whitelisted processes obtaining high-privilege access
+        to lsass.exe memory, potentially indicating credential dumping activity.
+        Validation performed using Atomic Red Team and manual testing with
+        ProcDump and rundll32/comsvcs.dll MiniDump.
+      
+      logsource:
+        product: windows
+        category: process_access
+      
+      detection:
+        selection_target:
+          TargetImage|endswith:
+            - '\lsass.exe'
+      
+        selection_access:
+          GrantedAccess:
+            - '0x1FFFFF'
+            - '0x143A'
+            - '0x1438'
+            - '0x1410'
+            - '0x1010'
+      
+        filter_legit:
+          SourceImage|endswith:
+            - '\MsMpEng.exe'
+            - '\SenseIR.exe'
+            - '\csagent.exe'
+      
+        condition: selection_target and selection_access and not filter_legit
+      
+      falsepositives:
+        - Microsoft Defender
+        - CrowdStrike Falcon
+        - SentinelOne
+        - Cortex XDR
+        - Sophos
+        - Carbon Black
+        - Incident Response tools
+        - Memory forensic tools
+      
+      level: high
+      
+      tags:
+        - attack.credential_access
+        - attack.t1003
+        - attack.t1003.001
     
     } //Windows
