@@ -1,0 +1,343 @@
+-TA0043 - Reconnaissance
+  -- T1595 - Active Scanning
+    --- T1595.001 - Scanning IP Blocks
+
+# THREAT DESCRIPTION
+  Adversaries may actively probe victim systems, networks, and services to identify open ports, exposed services, accessible hosts, and potential attack paths.
+  Active scanning is commonly performed prior to Initial Access, Lateral Movement, or Privilege Escalation activities and may target internal or external assets.
+  Scanning activity may originate from a single host or from multiple coordinated hosts and may target individual systems or multiple systems simultaneously.
+
+# THREAT MODEL
+  - Attacker Goal:
+      Identify reachable hosts, open ports, running services, and potential attack surfaces
+  - Prerequisites:
+      Network connectivity to target assets
+  - Potential Impact:
+      Attack Surface Discovery
+      Service Enumeration
+      Network Mapping
+      Target Prioritization
+      Preparation for Subsequent Attack Stages
+
+# TELEMETRY SOURCES
+  - Firewall Logs
+  - IDS/IPS Logs
+  - Network Flow Logs
+  - Zeek Connection Logs
+  - Cloud Network Logs
+
+# DETECTION TELEMETRY
+  - Network Connection Events
+      -- Relevant Fields:
+          --- SourceIp
+          --- DestinationIp
+          --- DestinationPort
+          --- Protocol
+          --- Action
+          --- Timestamp
+      * Example:
+          ** SourceIp: 10.10.10.5
+          ** DestinationIp: 10.10.20.15
+          ** DestinationPort: 445
+          ** Protocol: TCP
+          ** Action: Allowed
+          ** Timestamp: 18-06-2026 09:12
+
+# CORRELATION LOGIC
+  - Objective:
+    -- Identify active scanning activity characterized by repeated connections to multiple destination ports within a short time window.
+  - Correlation Criteria:
+    -- Pattern 1:
+      --- Single Source → Single Target
+        ---- Same SourceIp
+        ---- Same DestinationIp
+        ---- More than 10 unique DestinationPorts
+    -- Pattern 2:
+      --- Single Source → Multiple Targets
+        ---- Same SourceIp
+        ---- More than 1 DestinationIp
+        ---- Each DestinationIp:
+              * More than 10 unique DestinationPorts
+    -- Pattern 3:
+      --- Multiple Sources → Single Target
+        ---- More than 1 SourceIp
+        ---- Same DestinationIp
+        ---- Each SourceIp:
+              * More than 10 unique DestinationPorts
+    -- Pattern 4:
+      --- Multiple Sources → Multiple Targets
+        ---- More than 1 SourceIp
+        ---- More than 1 DestinationIp
+        ---- Each SourceIp:
+              * More than 10 unique DestinationPorts
+    - Time Window:
+      -- Within 1 minute
+    - Expected Behavior:
+      -- Repeated connection attempts to multiple destination ports over a short time interval.
+    - Detection Outcome:
+      -- High-confidence indication of potential active scanning activity.
+
+# INVESTIGATION ENRICHMENT
+  - Asset Inventory
+      -- Asset Criticality
+      -- Asset Ownership
+      -- Asset Exposure Classification
+  - Threat Intelligence
+      -- Known Scanner IP Addresses
+      -- Known Vulnerability Scanner Infrastructure
+  - Network Context
+      -- Internal Network Segments
+      -- DMZ
+      -- Internet-facing Assets
+
+# DETECTION STRATEGY
+  Detection relies on identifying repeated connection attempts to multiple destination ports and correlating source and destination relationships over a defined time window.
+
+# DETECTION LOGIC NOTES
+  - Active scanning commonly generates a high number of connection attempts toward multiple destination ports.
+  - Attackers frequently use tools such as:
+      -- Nmap
+      -- Masscan
+      -- ZMap
+      -- Custom scanning frameworks
+  - Legitimate administrative and security assessment activities may produce similar telemetry.
+  - Scanning may target:
+      -- Internal hosts
+      -- External hosts
+      -- Individual systems
+      -- Multiple systems
+  - Distributed scanning activity may involve multiple source hosts operating in a coordinated manner.
+  - Thresholds should be adjusted according to normal network behavior.
+  - The threshold of more than 10 unique destination ports within 1 minute is intended as a generic baseline and may require tuning.
+
+#SIGMA
+
+  - Generic Network Detection
+    {
+      title: Potential Active Scanning Activity
+      id: DS-002-ACTIVE-SCANNING
+      status: experimental
+
+      description: >
+        Detects network connection activity potentially associated with
+        active scanning. High-confidence detection is achieved through
+        SIEM-side correlation of source and destination relationships.
+
+      logsource:
+        category: network_connection
+
+      detection:
+
+        selection:
+          Action:
+            - Allowed
+            - Denied
+
+        condition: selection
+
+      falsepositives:
+        - Vulnerability Scanners
+        - Network Discovery Tools
+        - Asset Management Platforms
+        - Security Assessment Activities
+        - Administrative Network Diagnostics
+
+      level: low
+
+      tags:
+        - attack.reconnaissance
+        - attack.t1595
+
+    } //Generic Network Detection
+
+# LEVEL CONSIDERATIONS
+  The Sigma rule alone provides low-confidence detection.
+  High-confidence detection is achieved through SIEM-side correlation as described in the Correlation Logic section.
+  Consequently, the Sigma rule severity is Low while correlated alert severity varies according to the observed scanning pattern.
+
+# IMPLEMENTATION NOTES
+  The Sigma rule represents the initial network connection detection layer.
+  High-confidence alert generation should be performed through SIEM-side correlation using:
+    - SourceIp
+    - DestinationIp
+    - DestinationPort
+  correlation within a 1-minute time window as described in the Correlation Logic section.
+
+# ALERT DEFINITION
+
+  - Alert Name:
+    -- Potential Active Scanning - L2L - S2S
+  - Severity:
+    -- Medium
+  - Trigger:
+    -- Internal source scans internal destination
+    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2L - S2M
+  - Severity:
+    -- High
+  - Trigger:
+    -- Internal source scans multiple internal destinations
+    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2L - M2S
+  - Severity:
+    -- High
+  - Trigger:
+    -- Multiple internal sources scan the same internal destination
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2L - M2M
+  - Severity:
+    -- Critical
+  - Trigger:
+    -- Multiple internal sources scan multiple internal destinations
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2R - S2S
+  - Severity:
+    -- Medium
+  - Trigger:
+    -- Internal source scans external destination
+    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2R - S2M
+  - Severity:
+    -- High
+  - Trigger:
+    -- Internal source scans multiple external destinations
+    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2R - M2S
+  - Severity:
+    -- High
+  - Trigger:
+    -- Multiple internal sources scan the same external destination
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - L2R - M2M
+  - Severity:
+    -- Critical
+  - Trigger:
+    -- Multiple internal sources scan multiple external destinations
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2L - S2S
+  - Severity:
+    -- Medium
+  - Trigger:
+    -- External source scans internal destination
+    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2L - S2M
+  - Severity:
+    -- High
+  - Trigger:
+    -- External source scans multiple internal destinations
+    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2L - M2S
+  - Severity:
+    -- High
+  - Trigger:
+    -- Multiple external sources scan the same internal destination
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2L - M2M
+  - Severity:
+    -- Critical
+  - Trigger:
+    -- Multiple external sources scan multiple internal destinations
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2R - S2S
+  - Severity:
+    -- Medium
+  - Trigger:
+    -- External source scans external destination
+    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2R - S2M
+  - Severity:
+    -- High
+  - Trigger:
+    -- External source scans multiple external destinations
+    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2R - M2S
+  - Severity:
+    -- High
+  - Trigger:
+    -- Multiple external sources scan the same external destination
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Potential Active Scanning - R2R - M2M
+  - Severity:
+    -- Critical
+  - Trigger:
+    -- Multiple external sources scan multiple external destinations
+    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+  - Detected:
+    -- Nmap TCP Scans
+    -- Nmap SYN Scans
+    -- Masscan Activity
+    -- Distributed Scanning Activity
+    -- Internal Network Reconnaissance
+    -- External Network Reconnaissance
+    -- Service Discovery Activity
+    -- Port Enumeration Activity
+  - Potential Gaps:
+    -- Extremely Slow Scans
+    -- Threshold-aware Scanning
+    -- Scan Activity Below Detection Thresholds
+    -- Scanning Through Proxies or NAT Infrastructure
+    -- Encrypted or Obfuscated Scanning Techniques
