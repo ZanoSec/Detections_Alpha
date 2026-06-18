@@ -51,25 +51,25 @@
       --- Single Source → Single Target
         ---- Same SourceIp
         ---- Same DestinationIp
-        ---- More than 10 unique DestinationPorts
+        ---- More than 5 unique DestinationPorts
     -- Pattern 2:
       --- Single Source → Multiple Targets
         ---- Same SourceIp
         ---- More than 1 DestinationIp
         ---- Each DestinationIp:
-             ----- More than 10 unique DestinationPorts
+             ----- More than 5 unique DestinationPorts
     -- Pattern 3:
       --- Multiple Sources → Single Target
         ---- More than 1 SourceIp
         ---- Same DestinationIp
         ---- Each SourceIp:
-             ----- More than 10 unique DestinationPorts
+             ----- More than 5 unique DestinationPorts
     -- Pattern 4:
       --- Multiple Sources → Multiple Targets
         ---- More than 1 SourceIp
         ---- More than 1 DestinationIp
         ---- Each SourceIp:
-             ----- More than 10 unique DestinationPorts
+             ----- More than 5 unique DestinationPorts
     - Time Window:
       -- Within 1 minute
     - Expected Behavior:
@@ -107,7 +107,7 @@
       -- Individual systems
       -- Multiple systems
   - Distributed scanning activity may involve multiple source hosts operating in a coordinated manner.
-  - The threshold of more than 10 unique destination ports within 1 minute is intended as a generic baseline.
+  - The threshold of more than 5 unique destination ports within 1 minute is intended as a generic baseline.
   - The threshold should be adjusted according to normal network behavior, asset density, and expected administrative activities.
   - Organizations with highly dynamic environments may require higher thresholds to reduce false positives.
   - Highly restricted environments may benefit from lower thresholds to increase detection sensitivity.
@@ -176,7 +176,7 @@
     -- Medium
   - Trigger:
     -- Internal source scans internal destination
-    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+    -- Same SourceIp scans more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -186,7 +186,7 @@
     -- High
   - Trigger:
     -- Internal source scans multiple internal destinations
-    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+    -- Same SourceIp scans more than 5 unique DestinationPorts on multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -196,7 +196,7 @@
     -- High
   - Trigger:
     -- Multiple internal sources scan the same internal destination
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -206,7 +206,7 @@
     -- Critical
   - Trigger:
     -- Multiple internal sources scan multiple internal destinations
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts across multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -216,7 +216,7 @@
     -- Medium
   - Trigger:
     -- Internal source scans external destination
-    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+    -- Same SourceIp scans more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -226,7 +226,7 @@
     -- High
   - Trigger:
     -- Internal source scans multiple external destinations
-    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+    -- Same SourceIp scans more than 5 unique DestinationPorts on multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -236,7 +236,7 @@
     -- High
   - Trigger:
     -- Multiple internal sources scan the same external destination
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -246,7 +246,7 @@
     -- Critical
   - Trigger:
     -- Multiple internal sources scan multiple external destinations
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts across multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -256,7 +256,7 @@
     -- Medium
   - Trigger:
     -- External source scans internal destination
-    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+    -- Same SourceIp scans more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -266,7 +266,7 @@
     -- High
   - Trigger:
     -- External source scans multiple internal destinations
-    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+    -- Same SourceIp scans more than 5 unique DestinationPorts on multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -276,7 +276,7 @@
     -- High
   - Trigger:
     -- Multiple external sources scan the same internal destination
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -286,7 +286,7 @@
     -- Critical
   - Trigger:
     -- Multiple external sources scan multiple internal destinations
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts across multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -296,7 +296,7 @@
     -- Medium
   - Trigger:
     -- External source scans external destination
-    -- Same SourceIp scans more than 10 unique DestinationPorts on the same DestinationIp
+    -- Same SourceIp scans more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -306,7 +306,7 @@
     -- High
   - Trigger:
     -- External source scans multiple external destinations
-    -- Same SourceIp scans more than 10 unique DestinationPorts on multiple DestinationIp addresses
+    -- Same SourceIp scans more than 5 unique DestinationPorts on multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -316,7 +316,7 @@
     -- High
   - Trigger:
     -- Multiple external sources scan the same external destination
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts on the same DestinationIp
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts on the same DestinationIp
   - Confidence:
     -- High
 
@@ -326,7 +326,7 @@
     -- Critical
   - Trigger:
     -- Multiple external sources scan multiple external destinations
-    -- Multiple SourceIp addresses each scan more than 10 unique DestinationPorts across multiple DestinationIp addresses
+    -- Multiple SourceIp addresses each scan more than 5 unique DestinationPorts across multiple DestinationIp addresses
   - Confidence:
     -- High
 
@@ -375,7 +375,7 @@
       -- Restricting detection to commonly targeted service ports may reduce false positives generated by ephemeral or application-specific ports.
 
   - Threshold Tuning
-      -- More than 10 unique DestinationPorts within 1 minute is provided as a baseline value.
+      -- More than 5 unique DestinationPorts within 1 minute is provided as a baseline value.
       -- The threshold should be tuned according to:
           --- Network size
           --- Asset inventory
