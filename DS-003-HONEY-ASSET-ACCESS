@@ -119,6 +119,7 @@
 
 # DETECTION LOGIC NOTES
   - Detection accuracy depends on maintaining an authoritative inventory of all deployed Honey Accounts, Honey Credentials, Honey Tokens, and Honey Service Accounts.
+  - Detection quality is directly dependent on the visibility of authentication, Kerberos, LDAP, and identity telemetry sources.
   - Honey Assets are intentionally deployed deception resources.
   - Legitimate business processes should never interact with Honey Assets.
   - Authentication attempts against Honey Accounts may indicate credential discovery or credential stuffing activity.
