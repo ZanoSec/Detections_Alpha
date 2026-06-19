@@ -1,0 +1,248 @@
+-TA0042 - Resource Development
+  -- T1586 - Compromise Accounts
+
+# THREAT DESCRIPTION
+  Adversaries may compromise existing accounts to support malicious operations and establish resources that can be leveraged during later stages of an intrusion.
+  Compromised accounts may be used to facilitate reconnaissance, persistence, privilege escalation, lateral movement, or defense evasion activities.
+  Honey Accounts, Honey Credentials, Honey Tokens, and Honey Service Accounts are intentionally deployed deception assets that should never be legitimately accessed.
+  Any interaction with these assets may indicate account discovery, credential harvesting, unauthorized authentication attempts, or malicious reconnaissance activity.
+
+# THREAT MODEL
+  - Attacker Goal:
+      Discover and leverage valid accounts or credentials to support subsequent attack operations
+  - Prerequisites:
+      Access to the environment
+      Ability to perform authentication attempts, directory queries, or credential discovery activities
+  - Potential Impact:
+      Account Discovery
+      Credential Theft
+      Privilege Escalation Preparation
+      Lateral Movement Preparation
+      Resource Development
+
+# TELEMETRY SOURCES
+  - Windows Security Event Logs
+  - Active Directory Audit Logs
+  - LDAP Audit Logs
+  - Kerberos Authentication Logs
+  - Identity Provider Logs
+  - Microsoft Entra ID Audit Logs
+  - Honey Token Monitoring Platforms
+
+# DETECTION TELEMETRY
+  - Windows Security Event ID 4624
+      -- Successful Logon
+      -- Relevant Fields:
+          --- TargetUserName
+          --- LogonType
+          --- IpAddress
+          --- WorkstationName
+      * Example:
+          ** TargetUserName: svc_backup_honey
+          ** LogonType: 3
+          ** IpAddress: 10.10.10.50
+
+  - Windows Security Event ID 4625
+      -- Failed Logon
+      -- Relevant Fields:
+          --- TargetUserName
+          --- IpAddress
+          --- WorkstationName
+      * Example:
+          ** TargetUserName: administrator_honey
+          ** IpAddress: 10.10.10.50
+
+  - Windows Security Event ID 4768
+      -- Kerberos TGT Request
+      -- Relevant Fields:
+          --- TargetUserName
+          --- IpAddress
+      * Example:
+          ** TargetUserName: svc_sql_honey
+          ** IpAddress: 10.10.10.50
+
+  - LDAP Query Events
+      -- Relevant Fields:
+          --- QueryingUser
+          --- SearchFilter
+          --- ReturnedObject
+          --- SourceIp
+      * Example:
+          ** ReturnedObject: administrator_honey
+          ** SourceIp: 10.10.10.50
+
+# CORRELATION LOGIC
+  - Objective:
+    -- Identify any interaction with Honey Accounts, Honey Credentials, Honey Tokens, or Honey Service Accounts that may indicate malicious discovery or unauthorized authentication activity.
+  - Correlation Criteria:
+    -- Scenario 1:
+      --- Authentication attempt using a Honey Account
+    -- Scenario 2:
+      --- Kerberos TGT request for a Honey Account
+    -- Scenario 3:
+      --- LDAP query returning a Honey Account
+    -- Scenario 4:
+      --- Interactive logon using a Honey Account
+        ---- LogonType IN:
+              * 2  (Interactive)
+              * 10 (Remote Interactive / RDP)
+              * 11 (Cached Interactive)
+    -- Honey Asset Identification:
+      --- Target account exists in predefined Honey Account inventory
+      --- Target credential exists in predefined Honey Credential inventory
+      --- Target token exists in predefined Honey Token inventory
+      --- Target service account exists in predefined Honey Service Account inventory
+    - Time Window:
+      -- Immediate
+    - Expected Behavior:
+      -- No legitimate interaction should occur with Honey Assets.
+    - Detection Outcome:
+      -- High-confidence indication of potential malicious activity.
+
+# INVESTIGATION ENRICHMENT
+  - Asset Inventory
+      -- Honey Asset Classification
+      -- Honey Asset Owner
+      -- Honey Asset Deployment Location
+  - Identity Context
+      -- Source User
+      -- Source Host
+      -- Source IP Address
+      -- Authentication Method
+  - Threat Intelligence
+      -- Known Malicious IP Addresses
+      -- Known Proxy Infrastructure
+      -- Known VPN Providers
+
+# DETECTION STRATEGY
+  Detection relies on identifying any interaction with predefined Honey Accounts, Honey Credentials, Honey Tokens, or Honey Service Accounts.
+
+# DETECTION LOGIC NOTES
+  - Detection accuracy depends on maintaining an authoritative inventory of all deployed Honey Accounts, Honey Credentials, Honey Tokens, and Honey Service Accounts.
+  - Honey Assets are intentionally deployed deception resources.
+  - Legitimate business processes should never interact with Honey Assets.
+  - Authentication attempts against Honey Accounts may indicate credential discovery or credential stuffing activity.
+  - Kerberos TGT requests for Honey Accounts may indicate account enumeration or credential abuse attempts.
+  - LDAP queries returning Honey Accounts may indicate directory reconnaissance activity.
+  - Interactive logons involving Honey Accounts should be considered highly suspicious.
+  - Honey Assets should not be assigned legitimate permissions or business functions.
+  - Any interaction with Honey Assets should be investigated.
+  - Both successful and failed authentication attempts against Honey Accounts should be investigated.
+  - Failed authentication attempts may indicate account discovery or password guessing activity.
+  - Successful authentication attempts should be considered highly suspicious and may indicate credential compromise.
+
+#SIGMA
+
+  - Windows
+    {
+      title: Honey Account Interaction Detected
+      id: DS-003-HONEY-ASSET-ACCESS
+      status: experimental
+
+      description: >
+        Detects authentication activity involving predefined Honey Accounts,
+        Honey Credentials, Honey Tokens, or Honey Service Accounts.
+        High-confidence detection is achieved through correlation with
+        deception asset inventories.
+
+      logsource:
+        product: windows
+        service: security
+
+      detection:
+
+        selection_events:
+          EventID:
+            - 4624
+            - 4625
+            - 4768
+
+        selection_honey:
+          TargetUserName|contains:
+            - '_honey'
+
+        condition: selection_events and selection_honey
+
+      falsepositives:
+        - Honey Asset Validation Activities
+        - Authorized Security Testing
+
+      level: high
+
+      tags:
+        - attack.resource_development
+        - attack.t1586
+
+    } //Windows
+
+# LEVEL CONSIDERATIONS
+  The Sigma rule alone provides high-confidence detection.
+  Honey Assets are intentionally deployed deception resources and should never be accessed during normal operations.
+  Validation against the Honey Asset inventory further increases confidence and provides additional context.
+  Consequently, both Sigma and correlated alerts may be treated as High-confidence detections, with severity ranging from High to Critical depending on the observed activity.
+
+# IMPLEMENTATION NOTES
+  The '_honey' naming convention is provided as an example.
+  Organizations should adapt detection logic according to their Honey Asset naming standards and inventory management processes.
+  The Sigma rule represents the initial Honey Asset interaction detection layer.
+  High-confidence alert generation should be performed through SIEM-side enrichment and validation against:
+    - Honey Asset Inventory
+  using:
+    - TargetUserName
+    - Account Identifier
+    - Honey Asset Identifier
+  to determine whether the referenced account, credential, token, or service account is a registered Honey Asset.
+
+# ALERT DEFINITION
+  - Alert Name:
+    -- Honey Account Authentication Attempt
+  - Severity:
+    -- High
+  - Trigger:
+    -- Authentication attempt using a Honey Account
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Honey Account Kerberos TGT Request
+  - Severity:
+    -- High
+  - Trigger:
+    -- Kerberos TGT request for a Honey Account
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Honey Account LDAP Discovery
+  - Severity:
+    -- High
+  - Trigger:
+    -- LDAP query returns a Honey Account
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Honey Account Interactive Logon
+  - Severity:
+    -- Critical
+  - Trigger:
+    -- Interactive logon using a Honey Account
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+  - Detected:
+    -- Honey Account Discovery
+    -- Honey Credential Usage
+    -- Honey Token Access
+    -- Honey Service Account Authentication
+    -- Kerberos Enumeration Activity
+    -- LDAP Discovery Activity
+    -- Interactive Logon Attempts
+    -- Credential Harvesting Activity
+  - Potential Gaps:
+    -- Honey Assets Not Included In Monitoring Scope
+    -- Incomplete Honey Asset Inventory
+    -- Directory Reconnaissance Not Generating Auditable Events
+    -- Logging Misconfigurations
+    -- LDAP Query Auditing Not Enabled
