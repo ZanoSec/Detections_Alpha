@@ -1,0 +1,343 @@
+Detection Story 005 - Browser Downloaded Payload Execution (Content Injection)
+
+-TA0001 - Initial Access
+  -- T1659 - Content Injection
+
+# THREAT DESCRIPTION
+
+  Adversaries may inject malicious content into legitimate network traffic to deliver malicious payloads to target systems.
+  Content injection may occur through compromised network infrastructure, malicious proxies, rogue access points, ISP manipulation, or adversary-controlled intermediaries capable of modifying unencrypted traffic.
+  Injected content may include malicious executables, scripts, archives, browser redirects, or modified web pages that result in code execution or user compromise.
+  Successful content injection may lead to malware execution, credential theft, persistence establishment, or further compromise of the target environment.
+
+# THREAT MODEL
+
+  - Attacker Goal:
+      Deliver malicious content through injected network traffic to compromise client systems
+
+  - Prerequisites:
+      Ability to intercept or modify network traffic
+      User access to injected content
+      Browser or client application capable of downloading injected content
+
+  - Potential Impact:
+      Initial Access
+      Malware Execution
+      Credential Theft
+      Persistence Establishment
+      Command and Control
+      Internal Network Compromise
+
+# TELEMETRY SOURCES
+
+  - Browser Telemetry
+  - Endpoint Detection and Response Telemetry
+  - File Creation Events
+  - Process Creation Events
+  - Network Connection Events
+  - IDS / IPS Logs
+  - Proxy Logs
+  - DNS Logs
+  - Web Proxy Logs
+
+# DETECTION TELEMETRY
+
+  - File Creation Events
+
+      -- Relevant Fields:
+          --- ProcessName
+          --- FilePath
+          --- FileName
+          --- User
+
+      * Example:
+          ** ProcessName: chrome.exe
+          ** FilePath: C:\Users\User\AppData\Local\Temp\invoice.exe
+
+  - Process Creation Events
+
+      -- Relevant Fields:
+          --- ParentProcessName
+          --- ProcessName
+          --- Image
+          --- CommandLine
+
+      * Example:
+          ** ParentProcessName: explorer.exe
+          ** ProcessName: invoice.exe
+          ** Image: C:\Users\User\AppData\Local\Temp\invoice.exe
+
+  - Browser Process Events
+
+      -- Relevant Fields:
+          --- ProcessName
+          --- User
+          --- ProcessId
+
+  - Network Connection Events
+
+      -- Relevant Fields:
+          --- ProcessName
+          --- DestinationIp
+          --- DestinationPort
+
+      * Example:
+          ** ProcessName: invoice.exe
+          ** DestinationIp: 198.51.100.15
+          ** DestinationPort: 443
+
+  - IDS / IPS Events
+
+      -- Relevant Fields:
+          --- Signature
+          --- Severity
+
+      * Example:
+          ** Signature: HTTP Content Injection Attempt
+          ** Severity: High
+
+# CORRELATION LOGIC
+
+  - Objective:
+
+    -- Identify browser-delivered payloads written to suspicious user directories and executed shortly afterwards.
+
+  - Correlation Criteria:
+
+    -- Scenario 1:
+      --- Browser creates executable or script inside AppData, Temp or ProgramData
+
+    -- Scenario 2:
+      --- Newly created file is executed within a short period of time
+
+    -- Scenario 3:
+      --- Executed payload establishes outbound network communication
+
+    -- Scenario 4:
+      --- IDS / IPS detects HTTP content injection before payload execution
+
+    -- Scenario 5:
+      --- Multiple suspicious browser-created payloads observed on the same endpoint
+
+    -- Content Injection Identification:
+
+      --- Browser writes executable or script into user-controlled directory
+      --- Executable launched shortly after file creation
+      --- Execution path matches recently created file
+      --- Outbound network communication initiated after execution
+
+    - Time Window:
+
+      -- 5 Minutes
+
+    - Expected Behavior:
+
+      -- Browsers should rarely create executable content inside temporary or user-writable directories that is executed immediately afterwards.
+
+    - Detection Outcome:
+
+      -- Medium to High-confidence indication of malicious payload delivery through content injection.
+
+# INVESTIGATION ENRICHMENT
+
+  - Asset Context
+
+      -- Endpoint Name
+      -- Assigned User
+      -- Operating System
+      -- Asset Criticality
+
+  - Browser Context
+
+      -- Browser Name
+      -- Download URL
+      -- Referrer
+      -- Downloaded File
+
+  - File Context
+
+      -- File Hash
+      -- Digital Signature
+      -- File Size
+      -- File Path
+
+  - Threat Intelligence
+
+      -- Known Malware Hashes
+      -- Known Malicious Domains
+      -- Known Malicious IP Addresses
+
+# DETECTION STRATEGY
+
+  Detection relies on identifying executable or script files written by browser processes into user-controlled directories and correlating those events with subsequent process execution.
+
+# DETECTION LOGIC NOTES
+
+  - Browsers frequently download legitimate files; executable downloads require additional scrutiny.
+  - Immediate execution of newly downloaded payloads significantly increases detection confidence.
+  - Temporary and AppData directories are commonly abused by malware.
+  - Correlation between file creation and process execution reduces false positives.
+  - Additional confidence is obtained through IDS / IPS alerts and outbound network activity.
+  - Detection quality depends on endpoint telemetry providing both file creation and process creation visibility.
+
+# SIGMA
+
+  - File Creation
+
+    {
+      title: Browser Creating Executable In Suspicious User Directory
+      id: DS-005-BROWSER-SUSPICIOUS-FILE-CREATION
+      status: experimental
+
+      description: >
+        Detects browsers creating executable or script files inside
+        commonly abused user-writable directories that may indicate
+        payload delivery through content injection.
+
+      logsource:
+        category: file_event
+
+      detection:
+
+        selection_browser:
+          Image|endswith:
+            - '\chrome.exe'
+            - '\msedge.exe'
+            - '\firefox.exe'
+            - '\iexplore.exe'
+
+        selection_path:
+          TargetFilename|contains:
+            - '\AppData\'
+            - '\Temp\'
+            - '\ProgramData\'
+
+        selection_extension:
+          TargetFilename|endswith:
+            - '.exe'
+            - '.dll'
+            - '.ps1'
+            - '.vbs'
+            - '.js'
+            - '.bat'
+            - '.cmd'
+            - '.hta'
+
+        condition: selection_browser and selection_path and selection_extension
+
+      falsepositives:
+        - Legitimate Software Downloads
+        - Browser-based Software Installations
+        - Administrative Activities
+
+      level: medium
+
+      tags:
+        - attack.initial_access
+        - attack.t1659
+
+    }
+
+# LEVEL CONSIDERATIONS
+
+  The Sigma rule alone provides Medium-confidence detection of suspicious browser-driven payload delivery.
+  Legitimate software downloads may generate similar telemetry.
+  High-confidence detection is achieved by correlating browser file creation with subsequent execution and network activity.
+  Consequently, the Sigma rule severity is Medium while correlated alert severity may range from High to Critical depending on observed post-exploitation activity.
+
+# IMPLEMENTATION NOTES
+
+  Browser download locations vary across operating systems and enterprise configurations.
+  Organizations should adapt monitored directories according to endpoint standards.
+  The Sigma rule represents the initial payload delivery detection layer.
+  High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
+
+    - Browser Events
+    - File Creation Events
+    - Process Creation Events
+    - Network Connection Events
+    - IDS / IPS Events
+    - Threat Intelligence
+
+  using:
+
+    - Host Identifier
+    - Username
+    - File Path
+    - Process Identifier
+    - File Hash
+
+  to determine whether browser-delivered content resulted in payload execution, post-exploitation activity, or confirmed initial access.
+
+# ALERT DEFINITION
+
+  - Alert Name:
+    -- Browser Created Suspicious Executable
+
+  - Severity:
+    -- Medium
+
+  - Trigger:
+    -- Browser creates executable or script inside AppData, Temp or ProgramData
+
+  - Confidence:
+    -- Medium
+
+  - Alert Name:
+    -- Browser Download Followed By Execution
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Newly created file is executed within five minutes
+
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Browser Payload Execution With Network Activity
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Executed payload establishes outbound network communication
+
+  - Confidence:
+    -- High
+
+  - Alert Name:
+    -- Content Injection Confirmed Compromise
+
+  - Severity:
+    -- Critical
+
+  - Trigger:
+    -- Browser-created payload correlated with execution and post-exploitation activity
+
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+
+  - Detected:
+
+    -- Browser-delivered Payloads
+    -- Suspicious File Creation
+    -- Executable Creation In User Directories
+    -- Downloaded Payload Execution
+    -- Malware Delivery
+    -- Post-Exploitation Process Execution
+    -- Suspicious Outbound Network Activity
+    -- Initial Access Activity
+
+  - Potential Gaps:
+
+    -- Memory-only Payloads
+    -- Browser Exploitation Without File Writes
+    -- Encrypted Traffic Without Inspection
+    -- Missing File Creation Telemetry
+    -- Missing Process Creation Telemetry
+    -- Living-off-the-Land Payloads
+    -- Zero-Day Browser Exploitation
