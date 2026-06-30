@@ -47,6 +47,7 @@
           --- ProcessName
           --- FilePath
           --- FileName
+          --- FileHash
           --- User
 
       * Example:
@@ -325,7 +326,6 @@
   - Detected:
 
     -- Browser-Based Payload Delivery
-    -- Browser-delivered Payloads
     -- Suspicious File Creation
     -- Executable Creation In User Directories
     -- Downloaded Payload Execution
