@@ -130,7 +130,7 @@
 
     - Time Window:
 
-      -- 5 Minutes
+      -- 2 Minutes
 
     - Expected Behavior:
 
@@ -171,7 +171,7 @@
 
 # DETECTION STRATEGY
 
-  Detection relies on identifying executable or script files written by browser processes into user-writable directories and correlating their creation with subsequent execution of the same file (using the file path or file hash whenever available), followed by optional network or IDS/IPS enrichment to increase detection confidence.
+  Detection relies on identifying executable or script files written by browser processes into user-writable directories and correlating their creation with subsequent execution of the same file (using the file path or file hash whenever available), followed by enrichment with network and IDS/IPS telemetry, when available, to increase detection confidence.
 
 # DETECTION LOGIC NOTES
 
@@ -210,6 +210,7 @@
             - '\iexplore.exe'
             - '\opera.exe'
             - '\brave.exe'
+            - '\vivaldi.exe'
 
         selection_directory:
           TargetFilename|contains:
@@ -286,7 +287,7 @@
     -- Medium
 
   - Trigger:
-    -- Browser creates executable or script inside AppData, Temp or ProgramData
+    -- Browser creates an executable or script inside AppData, Temp, or ProgramData
 
   - Confidence:
     -- Medium
@@ -298,7 +299,7 @@
     -- High
 
   - Trigger:
-    -- Newly created file is executed within five minutes
+    -- Newly created file is executed within the defined correlation time window
 
   - Confidence:
     -- High
