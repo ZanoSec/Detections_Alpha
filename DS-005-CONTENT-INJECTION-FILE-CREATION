@@ -186,7 +186,7 @@
 
     {
       title: Browser Creating Executable In Suspicious User Directory
-      id: DS-005 - Content Injection Leading To Payload Execution
+      id: DS-005-CONTENT-INJECTION-FILE-CREATION
       status: experimental
 
       description: >
@@ -223,7 +223,7 @@
             - '.cmd'
             - '.hta'
 
-        condition: selection_browser and selection_path and selection_extension
+        condition: selection_browser and selection_directory and selection_extension
 
       falsepositives:
         - Legitimate Software Downloads
