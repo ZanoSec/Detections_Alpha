@@ -61,6 +61,8 @@
           --- ProcessName
           --- Image
           --- CommandLine
+          --- ProcessId
+          --- FileHash (if available)
 
       * Example:
           ** ParentProcessName: explorer.exe
@@ -105,10 +107,10 @@
   - Correlation Criteria:
 
     -- Scenario 1:
-      --- Browser creates executable or script inside AppData, Temp or ProgramData
+      --- Browser writes an executable or script to AppData, Temp, or ProgramData
 
     -- Scenario 2:
-      --- Newly created file is executed within a short period of time
+      --- The newly created file is executed within a short period of time, matching the created file path or file hash whenever available
 
     -- Scenario 3:
       --- Executed payload establishes outbound network communication
@@ -123,7 +125,7 @@
 
       --- Browser writes executable or script into user-controlled directory
       --- Executable launched shortly after file creation
-      --- Execution path matches recently created file
+      --- Execution path or file hash matches the same recently created file
       --- Outbound network communication initiated after execution
 
     - Time Window:
@@ -169,13 +171,13 @@
 
 # DETECTION STRATEGY
 
-  Detection relies on identifying executable or script files written by browser processes into user-writable directories and correlating file creation with subsequent execution of the same file and associated network activity.
+  Detection relies on identifying executable or script files written by browser processes into user-writable directories and correlating their creation with subsequent execution of the same file (using the file path or file hash whenever available), followed by optional network or IDS/IPS enrichment to increase detection confidence.
 
 # DETECTION LOGIC NOTES
 
   - Browsers frequently download legitimate files; executable downloads require additional scrutiny.
   - Immediate execution of newly downloaded payloads significantly increases detection confidence.
-  - Temporary and AppData directories are commonly abused by malware.
+  - Temporary, AppData, and ProgramData directories are commonly abused by malware to stage payloads prior to execution.
   - Correlation between file creation and process execution reduces false positives.
   - The same file path or file hash should be used whenever possible to correlate file creation with subsequent execution.
   - Additional confidence is obtained through IDS / IPS alerts and outbound network activity.
@@ -206,6 +208,8 @@
             - '\msedge.exe'
             - '\firefox.exe'
             - '\iexplore.exe'
+            - '\opera.exe'
+            - '\brave.exe'
 
         selection_directory:
           TargetFilename|contains:
@@ -245,6 +249,8 @@
   Legitimate software downloads may generate similar telemetry.
   High-confidence detection is achieved by correlating browser file creation with subsequent execution and network activity.
   Consequently, the Sigma rule severity is Medium while correlated alert severity may range from High to Critical depending on observed post-exploitation activity.
+  The Sigma rule detects only the initial payload delivery stage.
+  Correlation with subsequent process execution of the created file significantly increases detection confidence and is recommended for production deployments.
 
 # IMPLEMENTATION NOTES
 
@@ -325,6 +331,7 @@
 
   - Detected:
 
+    -- Browser-to-Process Execution Correlation
     -- Browser-Based Payload Delivery
     -- Suspicious File Creation
     -- Executable Creation In User Directories
