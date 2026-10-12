@@ -1,0 +1,544 @@
+- TA0004 - Privilege Escalation
+  -- T1548 - Abuse Elevation Control Mechanism
+    --- T1548.002 - Bypass User Account Control
+
+# THREAT DESCRIPTION
+
+  Adversaries may abuse Windows User Account Control (UAC) mechanisms to execute processes with elevated privileges without following the expected elevation workflow.
+  UAC helps limit the privileges available to processes until an authorized elevation occurs.
+  Attackers may exploit trusted Windows applications, auto-elevation behavior, user-writable registry locations, or elevated COM interfaces to obtain a higher-integrity execution context.
+  Certain UAC bypass techniques involve modifying per-user registry protocol handlers and subsequently launching trusted Windows binaries such as fodhelper.exe or computerdefaults.exe.
+  These registry modifications may redirect execution toward attacker-controlled commands or payloads.
+  Other UAC bypass methods may rely on DLL hijacking, COM object abuse, application-specific behavior, or vulnerabilities.
+  Successful exploitation may result in a High Integrity process executing commands, modifying protected system resources, disabling security controls, or establishing additional persistence.
+  Legitimate elevated applications and administrative workflows may exhibit overlapping characteristics, making registry, process lineage, integrity level, and execution context correlation essential.
+
+# THREAT MODEL
+
+  - Attacker Goal:
+      Obtain elevated process execution by bypassing or abusing Windows UAC mechanisms
+
+  - Prerequisites:
+      Ability to execute code on the target Windows endpoint
+      Access to an applicable UAC bypass mechanism
+      Sufficient permissions to modify the relevant user-writable registry locations when registry hijacking is involved
+      A security context and Windows configuration in which the selected bypass technique is applicable
+      An administrator account operating with a filtered token for common auto-elevation bypass scenarios
+
+  - Potential Impact:
+      Privilege Escalation
+      Elevated Command Execution
+      Defense Evasion
+      Security Control Modification
+      Persistence Establishment
+      Credential Access
+      Further Endpoint Compromise
+
+# TELEMETRY SOURCES
+
+  - Endpoint Detection and Response Telemetry
+  - Registry Modification Events
+  - Registry Key Creation and Deletion Events
+  - Process Creation Events
+  - Process Integrity Level Telemetry
+  - Process Token Elevation Telemetry
+  - Windows Security Events
+  - PowerShell Script Block Logs
+  - File Creation Events
+  - Module and DLL Load Events
+  - Threat Intelligence
+
+# DETECTION TELEMETRY
+
+  - Registry Value Modification Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Image
+          --- ProcessGuid
+          --- ProcessId
+          --- TargetObject
+          --- Details
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 13
+          ** Image: C:\Windows\System32\reg.exe
+          ** TargetObject: HKU\<UserSID>\Software\Classes\ms-settings\Shell\Open\command\DelegateExecute
+          ** Details: Empty String
+
+  - Registry Default Value Modification Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Image
+          --- ProcessGuid
+          --- TargetObject
+          --- Details
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 13
+          ** Image: C:\Windows\System32\reg.exe
+          ** TargetObject: HKU\<UserSID>\Software\Classes\ms-settings\Shell\Open\command\(Default)
+          ** Details: C:\Users\User\AppData\Local\Temp\payload.exe
+
+  - Registry Key Creation and Deletion Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- EventType
+          --- Image
+          --- ProcessGuid
+          --- TargetObject
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 12
+          ** EventType: CreateKey
+          ** TargetObject: HKU\<UserSID>\Software\Classes\ms-settings\Shell\Open\command
+
+  - Process Creation Events
+
+      -- Relevant Fields:
+          --- Image
+          --- CommandLine
+          --- ParentImage
+          --- ParentCommandLine
+          --- ProcessId
+          --- ProcessGuid
+          --- ParentProcessGuid
+          --- User
+          --- IntegrityLevel
+          --- EventTimestamp
+
+      * Example:
+          ** Image: C:\Windows\System32\fodhelper.exe
+          ** ParentImage: C:\Windows\explorer.exe
+          ** IntegrityLevel: High
+
+  - Elevated Child Process Events
+
+      -- Relevant Fields:
+          --- Image
+          --- CommandLine
+          --- ParentImage
+          --- ProcessGuid
+          --- ParentProcessGuid
+          --- User
+          --- IntegrityLevel
+          --- EventTimestamp
+
+      * Example:
+          ** ParentImage: C:\Windows\System32\fodhelper.exe
+          ** Image: C:\Windows\System32\cmd.exe
+          ** IntegrityLevel: High
+
+  - PowerShell Events
+
+      -- Relevant Fields:
+          --- ScriptBlockText
+          --- ScriptBlockId
+          --- ProcessId
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** ScriptBlockText: Registry modification targeting the ms-settings shell open command handler
+
+  - File Creation Events
+
+      -- Relevant Fields:
+          --- Image
+          --- ProcessGuid
+          --- TargetFilename
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** TargetFilename: C:\Users\User\AppData\Local\Temp\payload.exe
+
+# CORRELATION LOGIC
+
+  - Objective:
+
+    -- Identify suspicious UAC bypass activity involving registry handler manipulation, trusted auto-elevated Windows processes, anomalous process execution, or unexpected privilege elevation.
+
+  - Correlation Criteria:
+
+    -- Scenario 1:
+      --- Suspicious process modifies the per-user ms-settings shell open command registry handler
+
+    -- Scenario 2:
+      --- DelegateExecute and the default command value are created or modified within the same ms-settings handler
+
+    -- Scenario 3:
+      --- Suspicious ms-settings registry modification is followed by execution of fodhelper.exe or computerdefaults.exe
+
+    -- Scenario 4:
+      --- Trusted auto-elevated Windows binary launches an unexpected command interpreter or executable
+
+    -- Scenario 5:
+      --- Suspicious registry modification is followed by execution of the configured payload with High Integrity
+
+    -- Scenario 6:
+      --- A process operating with Medium Integrity modifies a relevant registry handler before an associated High Integrity execution chain
+
+    -- Scenario 7:
+      --- Registry handler references an executable or script located in a temporary or user-writable directory
+
+    -- Scenario 8:
+      --- Suspicious registry handler is created, used during an elevated execution sequence, and subsequently deleted
+
+    -- Scenario 9:
+      --- Unusual execution involving a trusted auto-elevated binary is correlated with unexpected elevated COM activity or another validated UAC bypass indicator
+
+    -- Scenario 10:
+      --- Suspected UAC bypass is followed by privileged actions such as security configuration changes, protected file modification, or persistence establishment
+
+    -- Suspicious UAC Bypass Identification:
+
+      --- Modification of a user-writable registry handler associated with known UAC bypass techniques
+      --- Suspicious DelegateExecute or default command configuration
+      --- Trusted auto-elevated Windows process launched shortly after registry modification
+      --- Unexpected elevated child process
+      --- Execution of a configured registry payload
+      --- Suspicious transition from Medium Integrity activity to related High Integrity execution
+      --- Execution from temporary or user-writable directories
+      --- Registry cleanup following suspicious elevated execution
+      --- Unexpected elevated COM activity supported by relevant telemetry
+      --- Subsequent privileged operations associated with the execution chain
+
+    - Correlation Keys:
+
+      -- Host Identifier + Registry TargetObject + Event Timestamp for registry modification correlation
+      -- Registry hive and User SID for identifying the affected per-user handler
+      -- Registry writer ProcessGuid for identifying the process responsible for the modification
+      -- ProcessGuid and ParentProcessGuid for direct process lineage correlation
+      -- Host Identifier, ProcessId, Process Start Time, and Event Timestamp when ProcessGuid is unavailable
+      -- Registry default value data matched against the subsequently executed process Image or interpreter CommandLine
+      -- User SID and process token context for correlating execution under the relevant security principal
+      -- IntegrityLevel used to compare execution contexts, not as independent proof of UAC bypass
+      -- File path and hash used as supporting evidence when available
+      -- Process identifiers should not be correlated across unrelated process lifetimes
+
+    - Time Window:
+
+      -- 5 Minutes for suspicious registry modification followed by execution of a monitored auto-elevated binary
+      -- 5 Minutes for auto-elevated binary execution followed by suspicious elevated process creation
+      -- 10 Minutes for related registry staging, elevated execution, and cleanup
+      -- Extended observation windows for delayed execution and techniques involving persistent registry configuration
+
+    - Expected Behavior:
+
+      -- Legitimate Windows applications may execute with High Integrity through authorized elevation mechanisms.
+      -- Registry protocol handlers may be modified by legitimate software installation or configuration activity.
+      -- Trusted Windows binaries may execute during normal administrative workflows.
+      -- High Integrity execution alone does not establish that UAC was bypassed.
+      -- Suspicious registry modifications should be correlated with actual execution evidence before concluding that privilege escalation occurred.
+
+    - Detection Outcome:
+
+      -- Medium to High-confidence indication of potential UAC bypass activity, with increased confidence when registry manipulation is reliably linked to unexpected elevated execution.
+
+# INVESTIGATION ENRICHMENT
+
+  - Asset Context
+
+      -- Endpoint Name
+      -- Operating System
+      -- Windows Build
+      -- Asset Criticality
+      -- UAC Configuration
+
+  - Registry Context
+
+      -- Registry Hive
+      -- Registry Key
+      -- Registry Value Name
+      -- Registry Value Data
+      -- Modifying Process
+      -- Modifying User
+      -- User SID
+      -- Registry Modification Timestamp
+
+  - Process Context
+
+      -- Process Image
+      -- Process Command Line
+      -- Parent Process
+      -- Parent Command Line
+      -- Process GUID
+      -- Parent Process GUID
+      -- Process Integrity Level
+      -- Token Elevation Information
+      -- Digital Signature
+      -- File Hash
+
+  - User Context
+
+      -- Username
+      -- User SID
+      -- Local Administrators Group Membership
+      -- Process Security Context
+      -- Expected Administrative Activity
+
+  - File Context
+
+      -- Referenced Payload Path
+      -- File Creation Time
+      -- File Hash
+      -- File Signature
+      -- File Reputation
+
+  - Threat Intelligence
+
+      -- Known Malicious File Hashes
+      -- Known Malicious Payload Paths
+      -- Known Malicious Command Indicators
+      -- Known UAC Bypass Tool Indicators
+
+# DETECTION STRATEGY
+
+  Detection relies on identifying suspicious modifications to registry locations associated with UAC bypass mechanisms and correlating those modifications with trusted auto-elevated process execution.
+  The initial Sigma rule focuses on monitored modifications to the per-user ms-settings shell open command handler.
+  Registry modification telemetry provides the initial detection signal, while process creation, integrity level, token information, and registry value data provide supporting evidence.
+  SIEM correlation should determine whether the modified registry configuration was followed by execution of a relevant trusted Windows binary and an unexpected elevated payload.
+  The strategy prioritizes multi-event execution chains rather than treating all elevated processes or all registry handler modifications as malicious.
+  High-confidence alerts require reliable linkage between suspicious configuration changes and elevated execution, or other strong evidence of unauthorized privilege elevation.
+  Other UAC bypass methods involving COM interfaces, DLL hijacking, or different registry handlers require broader correlation logic or additional dedicated detections.
+
+# DETECTION LOGIC NOTES
+
+  - UAC bypass techniques vary significantly across Windows versions and security configurations.
+  - Common auto-elevation bypass techniques may require an administrator account operating with a filtered token.
+  - UAC bypass should not be interpreted as automatically granting administrator privileges to an otherwise unprivileged account.
+  - High Integrity execution alone does not prove UAC bypass.
+  - The absence of an observed UAC prompt is not sufficient evidence unless reliable prompt or consent telemetry is available.
+  - Registry modification and successful privilege elevation are separate detection conditions.
+  - The per-user ms-settings handler may appear under HKCU or HKU\<UserSID> depending on the telemetry source.
+  - Registry paths and value names should be normalized before correlation.
+  - Sysmon Event ID 13 records registry value modifications but does not independently confirm that the configured command executed.
+  - Sysmon Event ID 12 can provide supporting key creation or deletion evidence.
+  - The registry default value may be represented as (Default) or another normalized value name depending on the telemetry pipeline.
+  - An empty DelegateExecute value can be relevant to known UAC bypass techniques.
+  - The existence of DelegateExecute alone does not confirm malicious activity.
+  - The configured default command may reference an interpreter, script, executable, or indirect command.
+  - Registry value data should be parsed and compared with subsequent execution telemetry.
+  - ProcessGuid and ParentProcessGuid should be preferred for direct process lineage.
+  - Suspicious execution may occur through indirect or multi-level process ancestry.
+  - Integrity levels should be evaluated alongside user identity, token information, and process lineage.
+  - Legitimate administrative elevation can produce Medium-to-High Integrity execution sequences.
+  - Registry cleanup following suspicious execution may be relevant but is not independent proof of malicious activity.
+  - Registry modifications by legitimate installers or approved administrative tools may produce false positives.
+  - Exclusions should be narrowly scoped to validated benign registry modification behavior.
+  - Execution of fodhelper.exe or computerdefaults.exe shortly after a registry modification does not independently confirm UAC bypass.
+  - Correlation should verify the affected user context, registry value data, process lineage, and subsequent elevated execution before attributing activity to the bypass mechanism.
+  - The Sigma rule covers a specific registry-based UAC bypass pattern rather than all T1548.002 techniques.
+  - Detection quality depends on registry telemetry, process creation visibility, integrity level information, and retained execution history.
+
+# SIGMA
+
+  - Registry Modification
+
+    title: Suspicious UAC Bypass Registry Handler Modification
+    id: 9c72e5b4-3a16-4e8d-b901-6f24a8c5d730
+    status: experimental
+
+    description: >
+      Detects modifications to the per-user ms-settings shell
+      open command registry handler associated with known
+      registry-based UAC bypass techniques.
+
+    logsource:
+      category: registry_set
+      product: windows
+
+    detection:
+
+      selection_delegate_execute:
+        TargetObject|endswith:
+          - '\Software\Classes\ms-settings\Shell\Open\command\DelegateExecute'
+
+      selection_default_value:
+        TargetObject|endswith:
+          - '\Software\Classes\ms-settings\Shell\Open\command\'
+          - '\Software\Classes\ms-settings\Shell\Open\command\(Default)'
+
+      condition: selection_delegate_execute or selection_default_value
+
+    falsepositives:
+      - Legitimate Registry Handler Configuration
+      - Authorized Software Installation
+      - Administrative Registry Modifications
+      - Approved Enterprise Configuration Tools
+
+    level: medium
+
+    tags:
+      - attack.privilege-escalation
+      - attack.t1548.002
+
+# LEVEL CONSIDERATIONS
+
+  The Sigma rule provides Medium-priority detection of registry modifications associated with known UAC bypass mechanisms.
+  A registry modification alone does not establish successful privilege escalation.
+  Legitimate applications and administrative tools may modify registry protocol handlers.
+  High-confidence detection requires additional evidence such as trusted auto-elevated binary execution followed by unexpected elevated payload execution.
+  Integrity level information should support correlation but should not be used as independent proof of malicious elevation.
+  Consequently, Sigma severity is Medium while correlated alert severity may range from High to Critical depending on the observed execution chain and subsequent activity.
+
+# IMPLEMENTATION NOTES
+
+  The Sigma rule represents the initial registry modification detection layer for selected UAC bypass techniques.
+  Organizations should validate the relevant registry paths and value naming conventions against their Windows telemetry.
+  Registry telemetry should capture modifications to per-user ms-settings shell open command values.
+  HKCU and HKU\<UserSID> representations should be normalized for reliable correlation.
+  Registry value data should be retained to identify the configured command or executable.
+  Process creation telemetry should include Image, CommandLine, ParentImage, ProcessGuid, ParentProcessGuid, User, and IntegrityLevel when available.
+  Process lineage should be reconstructed using stable process identifiers.
+  SIEM correlation should verify whether a relevant trusted Windows binary executed after the registry modification.
+  Subsequent elevated process execution should be matched against the configured registry command when possible.
+  User SID, token context, and integrity level information should be used to distinguish expected administrative elevation from suspicious behavior.
+  The Sigma rule is intentionally limited to the ms-settings shell open command handler.
+  Other UAC bypass methods require additional detection logic and should not be considered directly covered by this Sigma rule.
+  Underlying registry and process telemetry should remain available for SIEM correlation even when an event does not match the Sigma rule.
+  Approved administrative and software configuration activity should be evaluated before introducing narrowly scoped exclusions.
+  High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
+
+    - Registry Modification Events
+    - Registry Key Creation and Deletion Events
+    - Process Creation Events
+    - Process Integrity Level Telemetry
+    - Process Token Elevation Telemetry
+    - PowerShell Events
+    - File Creation Events
+    - Windows Security Events
+    - Threat Intelligence
+
+  using:
+
+    - Host Identifier
+    - Registry TargetObject
+    - Registry Value Data
+    - User SID
+    - Process GUID
+    - Parent Process GUID
+    - Process Identifier
+    - Process Start Time
+    - Event Timestamp
+    - Process Image
+    - Parent Process Image
+    - Command Line
+    - Integrity Level
+    - Token Elevation Information
+    - File Path
+    - File Hash
+
+  to determine whether suspicious registry handler manipulation resulted in unauthorized elevated execution or other activity consistent with UAC bypass.
+
+# ALERT DEFINITION
+
+  - Alert Name:
+    -- Suspicious UAC Bypass Registry Handler Modification
+
+  - Severity:
+    -- Medium
+
+  - Trigger:
+    -- Modification of a monitored sensitive value within the per-user ms-settings shell open command handler
+
+  - Confidence:
+    -- Low until related suspicious execution activity is established
+
+  - Alert Name:
+    -- Suspicious UAC Bypass Registry Staging
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Related modifications to DelegateExecute and the default command value are observed within the same per-user ms-settings handler
+
+  - Confidence:
+    -- Medium to High depending on the configured command and modifying process
+
+  - Alert Name:
+    -- Suspected UAC Bypass Through Auto-Elevated Binary
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious registry handler modification followed by execution of a relevant trusted auto-elevated Windows binary
+
+  - Confidence:
+    -- Medium to High depending on execution context and registry configuration
+
+  - Alert Name:
+    -- UAC Bypass Followed By Elevated Payload Execution
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious registry handler modification and trusted auto-elevated binary execution correlated with an unexpected High Integrity process matching the configured payload
+
+  - Confidence:
+    -- High when registry and process execution evidence are reliably linked
+
+  - Alert Name:
+    -- UAC Bypass Associated With Confirmed Malicious Activity
+
+  - Severity:
+    -- Critical
+
+  - Trigger:
+    -- Suspected UAC bypass correlated with confirmed malicious payload execution, unauthorized security changes, or other strongly indicative malicious activity
+
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+
+  - Direct Sigma Coverage:
+
+    -- Modifications To Monitored ms-settings Shell Open Command Registry Values
+    -- DelegateExecute Value Modifications Within The Monitored Handler
+    -- Default Command Value Modifications Within The Monitored Handler
+    -- Registry-Based UAC Bypass Staging Matching The Defined Sigma Conditions
+
+  - Correlated Coverage - Requires SIEM Implementation:
+
+    -- Related DelegateExecute And Default Command Modifications
+    -- Registry Modification Followed By Auto-Elevated Binary Execution
+    -- Unexpected Elevated Child Process Execution
+    -- Configured Registry Payload Executed With High Integrity
+    -- Suspicious Medium-To-High Integrity Execution Chains
+    -- Registry Handler Cleanup Following Suspicious Execution
+    -- Suspicious Auto-Elevated COM Activity When Relevant Telemetry Exists
+    -- Privileged Actions Following Suspected UAC Bypass
+    -- Potential Successful UAC Bypass Through Registry Handler Manipulation
+
+  - Potential Gaps:
+
+    -- UAC Bypass Techniques Not Involving The Monitored ms-settings Registry Handler
+    -- COM-Based UAC Bypass Without Observable Registry Modification
+    -- DLL Hijacking-Based UAC Bypass
+    -- Other Registry Handler Hijacking Techniques
+    -- Registry Value Naming Or Path Representations Not Covered By The Sigma Rule
+    -- Registry Key Creation Without Monitored Value Modification
+    -- Missing Registry Modification Telemetry
+    -- Missing Registry Value Data
+    -- Missing Process Creation Events
+    -- Missing Integrity Level Or Token Elevation Information
+    -- Incomplete Process Ancestry
+    -- Indirect Elevated Execution Without A Direct Observable Child Relationship
+    -- Malicious Activity Outside Correlation Windows
+    -- Windows Builds Where The Selected Bypass Technique Is Not Applicable
+    -- Registry Handler Modifications Through Unmonitored Mechanisms
+    -- Legitimate-Looking Registry Configuration And Elevated Execution
+    -- Successful UAC Bypass Without Distinctive Follow-On Activity
