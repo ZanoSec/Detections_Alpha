@@ -1,0 +1,512 @@
+
+DS-008 - Suspicious Registry Run Key Persistence
+
+- TA0003 - Persistence
+  -- T1547 - Boot or Logon Autostart Execution
+    --- T1547.001 - Registry Run Keys / Startup Folder
+
+# THREAT DESCRIPTION
+
+  Adversaries may establish persistence on Windows endpoints by creating or modifying Registry Run and RunOnce values that automatically execute programs during user logon.
+  Commonly abused locations include the Run and RunOnce registry keys under HKEY_CURRENT_USER and HKEY_LOCAL_MACHINE.
+  Attackers may configure these values to execute malicious binaries, scripts, or commands through legitimate Windows interpreters.
+  Suspicious registry values may reference executables stored in user-writable directories, temporary locations, or other unusual paths.
+  Adversaries may disguise persistence entries using names resembling legitimate software components or system utilities.
+  Registry modifications may occur shortly after initial compromise, payload download, or malicious command execution.
+  The configured payload may execute during a subsequent user logon, potentially long after the registry modification occurred.
+  Legitimate applications also use Registry Run and RunOnce keys, making behavioral correlation and contextual validation essential for reliable detection.
+
+# THREAT MODEL
+
+  - Attacker Goal:
+      Maintain execution capability on a compromised Windows endpoint through Registry Run or RunOnce autostart mechanisms
+
+  - Prerequisites:
+      Ability to execute commands or modify registry values on the target endpoint
+      Sufficient permissions to modify the targeted registry location
+      Availability of a payload, script, or command to execute during a subsequent logon
+
+  - Potential Impact:
+      Persistence Establishment
+      Repeated Malicious Code Execution
+      Payload Execution
+      Defense Evasion
+      Credential Access
+      Command and Control
+      Further Endpoint Compromise
+
+# TELEMETRY SOURCES
+
+  - Endpoint Detection and Response Telemetry
+  - Registry Modification Events
+  - Process Creation Events
+  - File Creation Events
+  - File Modification Events
+  - Windows Event Logs
+  - User Logon Events
+  - PowerShell Script Block Logs
+  - Threat Intelligence
+
+# DETECTION TELEMETRY
+
+  - Registry Modification Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Image
+          --- ProcessGuid
+          --- ProcessId
+          --- TargetObject
+          --- Details
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 13
+          ** Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+          ** TargetObject: HKU\<UserSID>\Software\Microsoft\Windows\CurrentVersion\Run\Updater
+          ** Details: C:\Users\User\AppData\Roaming\Updater\updater.exe
+
+  - Process Creation Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Image
+          --- CommandLine
+          --- ParentImage
+          --- ParentCommandLine
+          --- ProcessGuid
+          --- ParentProcessGuid
+          --- ProcessId
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 1
+          ** Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+          ** CommandLine: powershell.exe -NoProfile -Command "New-ItemProperty -Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Run -Name Updater -Value C:\Users\User\AppData\Roaming\Updater\updater.exe -PropertyType String -Force"
+
+  - File Creation Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Image
+          --- ProcessGuid
+          --- TargetFilename
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 11
+          ** Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+          ** TargetFilename: C:\Users\User\AppData\Roaming\Updater\updater.exe
+
+  - User Logon Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Host Identifier
+          --- User
+          --- LogonId
+          --- LogonType
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 4624
+          ** User: User
+          ** LogonType: 2
+
+  - Subsequent Payload Execution Events
+
+      -- Relevant Fields:
+          --- EventID
+          --- Image
+          --- CommandLine
+          --- ParentImage
+          --- ProcessGuid
+          --- ParentProcessGuid
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** EventID: 1
+          ** Image: C:\Users\User\AppData\Roaming\Updater\updater.exe
+          ** ParentImage: C:\Windows\explorer.exe
+
+# CORRELATION LOGIC
+
+  - Objective:
+
+    -- Identify suspicious Registry Run or RunOnce modifications associated with unusual processes, user-writable payload locations, suspicious command execution, or subsequent execution of the configured payload.
+
+  - Correlation Criteria:
+
+    -- Scenario 1:
+      --- PowerShell, CMD, or another scripting interpreter creates or modifies a Registry Run or RunOnce value
+
+    -- Scenario 2:
+      --- A Registry Run or RunOnce value references an executable or script stored in a temporary or user-writable directory
+
+    -- Scenario 3:
+      --- A suspicious process creates or modifies a Registry Run or RunOnce value shortly after initial execution
+
+    -- Scenario 4:
+      --- A Registry Run or RunOnce value references a suspicious command or scripting interpreter invocation
+
+    -- Scenario 5:
+      --- A process creates an executable or script file and subsequently registers that file through a Run or RunOnce value
+
+    -- Scenario 6:
+      --- A Registry Run or RunOnce value is modified by an unusual or untrusted process
+
+    -- Scenario 7:
+      --- A Registry Run or RunOnce value references a known malicious file or strongly suspicious payload
+
+    -- Scenario 8:
+      --- A suspicious Run or RunOnce value is created shortly after a payload download or other suspicious file activity
+
+    -- Scenario 9:
+      --- A configured payload executes during a subsequent user logon
+
+    -- Scenario 10:
+      --- Registry persistence modification is associated with multiple suspicious activities involving process execution, file creation, or network communication
+
+    -- Suspicious Persistence Identification:
+
+      --- Run or RunOnce modification by an unusual process
+      --- Autostart value referencing a user-writable or temporary directory
+      --- Autostart value referencing suspicious interpreter arguments
+      --- Registry modification shortly after suspicious command execution
+      --- Registry value referencing a newly created executable or script
+      --- Registry value referencing known malicious content
+      --- Subsequent execution of the registered payload
+      --- Multiple suspicious activities associated with the same persistence mechanism
+
+    - Correlation Keys:
+
+      -- Host Identifier + TargetObject + Event Timestamp for registry modification identification
+      -- ProcessGuid for correlating registry modification with the originating process
+      -- ProcessId, Host Identifier, Process Start Time, and Event Timestamp when ProcessGuid is unavailable
+      -- Registry value name and configured command extracted from TargetObject and Details
+      -- Configured executable or script path matched against file creation telemetry
+      -- Configured executable path matched against subsequent Process Creation Image
+      -- Configured script path matched against subsequent interpreter CommandLine or script telemetry
+      -- File hash used as supporting evidence when available and reliably collected
+      -- Host Identifier + User Identifier + Logon Timestamp for subsequent logon correlation
+      -- Registry value history retained to associate delayed execution with the relevant configuration
+      -- Process identifiers should not be correlated across unrelated process lifetimes
+
+    - Time Window:
+
+      -- 5 Minutes for suspicious process execution followed by registry modification
+      -- 10 Minutes for file creation or download followed by registration through Run or RunOnce
+      -- Extended observation windows for registry persistence modifications followed by delayed execution
+      -- Subsequent logon execution should be correlated using retained registry state rather than relying exclusively on a short fixed time window
+
+    - Expected Behavior:
+
+      -- Legitimate applications frequently create or modify Run and RunOnce values during installation, updates, and user configuration.
+      -- Authorized persistence entries should generally reference expected applications, publishers, paths, and management workflows.
+      -- Registry modification alone does not confirm malicious persistence.
+      -- RunOnce entries may execute once and subsequently be removed as part of normal Windows behavior.
+
+    - Detection Outcome:
+
+      -- Medium to High-confidence indication of suspicious registry-based persistence, with increased confidence when the configured payload is malicious or subsequent execution is reliably correlated.
+
+# INVESTIGATION ENRICHMENT
+
+  - Asset Context
+
+      -- Endpoint Name
+      -- Assigned User
+      -- Operating System
+      -- Asset Criticality
+
+  - Registry Context
+
+      -- Registry Hive
+      -- Registry Key Path
+      -- Registry Value Name
+      -- Registry Value Data
+      -- Previous Registry Value Data
+      -- Registry Modification Timestamp
+      -- Registry Modification Process
+
+  - Process Context
+
+      -- Process Image
+      -- Process Command Line
+      -- Parent Process
+      -- Parent Command Line
+      -- Process GUID
+      -- Parent Process GUID
+      -- Process Identifier
+      -- Digital Signature
+      -- File Hash
+
+  - File Context
+
+      -- Configured Payload Path
+      -- File Creation Timestamp
+      -- File Hash
+      -- File Type
+      -- Digital Signature
+      -- File Reputation
+      -- Subsequent Execution Activity
+
+  - User Context
+
+      -- Username
+      -- User SID
+      -- User Privileges
+      -- Logon Activity
+      -- Expected Administrative Activity
+
+  - Threat Intelligence
+
+      -- Known Malicious File Hashes
+      -- Known Malicious Executables
+      -- Known Malicious Script Indicators
+      -- Known Malicious Command Patterns
+
+# DETECTION STRATEGY
+
+  Detection relies on identifying suspicious Registry Run and RunOnce modifications associated with unusual processes, suspicious value data, or payloads stored in user-writable directories.
+  Registry modification telemetry provides the initial detection signal, while process creation, file creation, user logon events, and endpoint enrichment provide supporting behavioral evidence.
+  The strategy prioritizes suspicious persistence configurations rather than treating all Run and RunOnce modifications as malicious.
+  Correlation between the registry modification process, configured payload path, file activity, and subsequent execution increases confidence.
+  High-confidence alerts require stronger evidence such as a known malicious payload, reliable execution of the registered suspicious content, or multiple related malicious behaviors.
+
+# DETECTION LOGIC NOTES
+
+  - Registry Run and RunOnce keys are legitimate Windows autostart mechanisms.
+  - Registry modification alone does not confirm malicious persistence.
+  - Run and RunOnce values may be modified by installers, software updaters, management tools, and authorized applications.
+  - User-writable payload paths are suspicious indicators but are not independently malicious.
+  - Registry value names may imitate legitimate software components.
+  - Registry value data should be parsed to identify the configured executable, script, interpreter, and arguments.
+  - Environment variables, quotation marks, relative paths, and command-line arguments may complicate path normalization.
+  - HKCU registry modifications may appear under HKEY_USERS with the corresponding user SID in endpoint telemetry.
+  - Registry path normalization should account for equivalent registry hive representations.
+  - Registry value creation and modification may produce different event types depending on the telemetry source.
+  - Sysmon Event ID 13 records registry value-setting activity but does not by itself establish that the payload executed.
+  - Sysmon Event ID 11 records file creation but does not normally provide the created file's hash.
+  - File hashes should be obtained through supporting endpoint telemetry or enrichment when available.
+  - Registry modification and subsequent payload execution may occur in different user sessions.
+  - Direct process ancestry may not link the original registry modification process to later logon execution.
+  - Delayed execution should be correlated through retained registry configuration, host identity, user context, and configured payload path.
+  - Subsequent payload execution should not be attributed to a Run or RunOnce value solely based on temporal proximity to user logon.
+  - Correlation should verify the configured executable or script path, relevant user context, and available process execution evidence before attributing execution to the persistence mechanism.
+  - RunOnce execution may result in removal of the registry value, so historical registry state is important.
+  - Registry modification events may be unavailable if the relevant keys are not monitored.
+  - Exclusions should be narrowly scoped to validated benign software and management workflows.
+  - Detection quality depends on registry monitoring coverage, value-data visibility, and reliable process and file telemetry.
+
+# SIGMA
+
+  - Registry Modification
+
+    title: Suspicious Registry Run Key Persistence
+    id: 7e4d2c91-6b38-4a5f-9c20-13d8e6b74205
+    status: experimental
+
+    description: >
+      Detects suspicious Windows Registry Run and RunOnce
+      value modifications associated with scripting interpreters
+      and suspicious autostart payload locations, or registry
+      values containing suspicious command execution indicators.
+
+    logsource:
+      category: registry_set
+      product: windows
+
+    detection:
+
+      selection_run_keys:
+        TargetObject|contains:
+          - '\Software\Microsoft\Windows\CurrentVersion\Run\'
+          - '\Software\Microsoft\Windows\CurrentVersion\RunOnce\'
+
+      selection_suspicious_processes:
+        Image|endswith:
+          - '\powershell.exe'
+          - '\pwsh.exe'
+          - '\cmd.exe'
+          - '\wscript.exe'
+          - '\cscript.exe'
+          - '\reg.exe'
+
+      selection_suspicious_paths:
+        Details|contains:
+          - '\AppData\Local\Temp\'
+          - '\Windows\Temp\'
+          - '\Users\Public\'
+
+      selection_suspicious_commands:
+        Details|contains:
+          - '-EncodedCommand'
+          - '-enc '
+          - 'DownloadString('
+          - 'Invoke-Expression'
+          - 'IEX('
+          - 'wscript.exe'
+          - 'cscript.exe'
+
+      condition: selection_run_keys and ((selection_suspicious_processes and selection_suspicious_paths) or selection_suspicious_commands)
+
+    falsepositives:
+      - Legitimate Software Installation
+      - Authorized Software Updates
+      - Enterprise Management Tools
+      - User Startup Applications
+      - Administrative Scripts
+      - Approved Automation
+
+    level: medium
+
+    tags:
+      - attack.persistence
+      - attack.t1547.001
+
+# LEVEL CONSIDERATIONS
+
+  The Sigma rule provides Medium-priority detection of potentially suspicious Registry Run or RunOnce modifications.
+  A registry value referencing a user-writable directory or modified by a scripting interpreter does not independently confirm malicious persistence.
+  Legitimate software installers, updaters, and administrative tools may generate similar events.
+  The Sigma rule should be treated as an initial detection signal rather than proof of compromise.
+  Confidence increases when suspicious registry modifications are correlated with newly created payloads, suspicious command execution, malicious file reputation, or subsequent execution of the configured content.
+  High-confidence alerts should require reliable evidence of malicious activity or multiple related suspicious behaviors.
+  Consequently, Sigma severity is Medium while correlated alert severity may range from High to Critical depending on observed behavior.
+
+# IMPLEMENTATION NOTES
+
+  The Sigma rule provides an initial registry modification detection layer for suspicious Run and RunOnce persistence activity.
+  Organizations should adapt monitored registry paths, process indicators, and value-data indicators according to their environment.
+  Registry monitoring should include relevant HKEY_CURRENT_USER and HKEY_LOCAL_MACHINE Run and RunOnce locations.
+  HKEY_CURRENT_USER activity may be represented through HKEY_USERS and user SID paths in endpoint telemetry.
+  Registry key paths and value data should be normalized before correlation.
+  The detection focuses on Registry Run and RunOnce values and does not provide complete coverage of all T1547.001 persistence mechanisms, including Startup Folder abuse.
+  Registry value data should be parsed to identify executable paths, scripts, interpreter commands, and associated arguments.
+  ProcessGuid should be used to correlate registry modifications with the process responsible for the change.
+  File creation events should be correlated with configured payload paths when available.
+  Subsequent execution should be correlated against the previously observed registry value data and user logon activity.
+  Delayed execution may require retained registry history and longer observation periods.
+  Approved software installation and management activity should be identified through validated baselines and narrowly scoped exclusions.
+  The Sigma rule requires either a monitored suspicious process modifying a Run or RunOnce value that references a monitored suspicious path, or a Run or RunOnce value containing a monitored suspicious command indicator.
+  Registry modifications outside these combinations remain relevant for broader SIEM correlation but are not directly detected by this Sigma rule.
+  High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
+
+    - Registry Modification Events
+    - Process Creation Events
+    - File Creation Events
+    - User Logon Events
+    - PowerShell Events
+    - Threat Intelligence
+
+  using:
+
+    - Host Identifier
+    - Registry Key Path
+    - Registry Value Name
+    - Registry Value Data
+    - ProcessGuid
+    - Process Identifier
+    - Process Start Time
+    - Event Timestamp
+    - Username
+    - User SID
+    - Configured Executable Path
+    - Configured Script Path
+    - File Hash
+    - Logon Timestamp
+
+  to determine whether suspicious Run or RunOnce modifications are associated with malicious persistence configuration, suspicious payload creation, or subsequent execution of the registered content.
+
+# ALERT DEFINITION
+
+  - Alert Name:
+    -- Suspicious Registry Run Key Modification
+
+  - Severity:
+    -- Medium
+
+  - Trigger:
+    -- Registry Run or RunOnce modification matches monitored suspicious process or value-data indicators
+
+  - Confidence:
+    -- Low until additional suspicious behavior is established
+
+  - Alert Name:
+    -- Suspicious Registry Persistence With Newly Created Payload
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious Run or RunOnce modification references a newly created executable or script file
+
+  - Confidence:
+    -- Medium to High depending on payload characteristics and execution context
+
+  - Alert Name:
+    -- Suspicious Registry Persistence Followed By Payload Execution
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious Run or RunOnce value references a payload subsequently executed during user logon
+
+  - Confidence:
+    -- High when registry configuration, user logon, and payload execution are reliably correlated
+
+  - Alert Name:
+    -- Registry Persistence Associated With Confirmed Malicious Activity
+
+  - Severity:
+    -- Critical
+
+  - Trigger:
+    -- Suspicious Run or RunOnce modification references confirmed malicious payloads or is correlated with other confirmed malicious activity
+
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+
+  - Direct Sigma Coverage:
+
+    -- Run And RunOnce Modifications By Monitored Processes Referencing Suspicious Payload Locations
+    -- Run And RunOnce Values Containing Monitored Suspicious Command Indicators
+    -- Suspicious Registry Persistence Configurations Matching The Defined Sigma Conditions
+
+  - Correlated Coverage - Requires SIEM Implementation:
+
+    -- Suspicious Registry Modification Following Initial Command Execution
+    -- Registry Persistence Associated With Newly Created Payloads
+    -- Registry Persistence Associated With Suspicious Payload Downloads
+    -- Suspicious Registry Persistence Followed By Subsequent Payload Execution
+    -- Registry Persistence Associated With Suspicious Interpreter Activity
+    -- Multi-Stage Suspicious Persistence Establishment
+
+  - Potential Gaps:
+
+    -- Registry Run Or RunOnce Modifications Without Monitored Indicators
+    -- Registry Modifications Outside Monitored Registry Paths
+    -- Missing Registry Value Data
+    -- Missing Registry Modification Events
+    -- Alternate Registry Path Representations
+    -- Obfuscated Or Unrecognized Registry Value Commands
+    -- Malicious Payloads Stored In Legitimate-Looking Locations
+    -- Legitimate Software Used To Establish Malicious Persistence
+    -- Missing File Creation Events
+    -- Missing Process Creation Events
+    -- Missing User Logon Events
+    -- Missing Or Inconsistent Process Identifiers
+    -- Delayed Execution Outside Retained Correlation History
+    -- Registry Values Modified Or Removed Before Execution
+    -- Startup Folder Persistence Not Covered By The Sigma Rule
+    -- Other Persistence Techniques Outside Registry Run And RunOnce
+    -- Run Or RunOnce Values Referencing AppData\Roaming Payloads Without Other Monitored Suspicious Indicators
+    -- Registry Modifications By Monitored Interpreters That Do Not Match Suspicious Path Or Command Conditions
