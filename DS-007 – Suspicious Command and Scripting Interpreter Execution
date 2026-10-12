@@ -1,4 +1,4 @@
--TA0002 - Execution
+- TA0002 - Execution
   -- T1059 - Command and Scripting Interpreter
 
 # THREAT DESCRIPTION
@@ -312,6 +312,9 @@
   - Interpreter-to-interpreter execution chains may occur during legitimate administration.
   - Known administrative automation and approved software management activity should be evaluated before applying exclusions.
   - Exclusions should be narrowly scoped to validated benign behaviors rather than broadly excluding trusted interpreter binaries.
+  - Suspicious parent-child relationships alone do not trigger the optimized Sigma rule unless accompanied by monitored suspicious command-line indicators.
+  - Strong PowerShell command-line indicators may trigger the Sigma rule independently of parent process context.
+  - The optimized Sigma rule prioritizes precision over broad interpreter execution coverage and may miss malicious execution using benign-looking command lines.
   - Detection quality depends on endpoint telemetry coverage, command-line visibility, and availability of supporting events.
 
 # SIGMA
@@ -323,9 +326,10 @@
     status: experimental
 
     description: >
-      Detects command and scripting interpreters launched by
-      unusual parent processes or using suspicious command-line
-      arguments that may indicate malicious execution activity.
+      Detects suspicious Windows command and scripting interpreter
+      execution based on strong PowerShell command-line indicators
+      or combinations of suspicious parent processes and weaker
+      command-line indicators.
 
     logsource:
       category: process_creation
@@ -353,20 +357,26 @@
           - '\msedge.exe'
           - '\firefox.exe'
 
-      selection_powershell_arguments:
+      selection_powershell_strong:
         Image|endswith:
           - '\powershell.exe'
           - '\pwsh.exe'
         CommandLine|contains:
           - '-EncodedCommand'
           - '-enc '
+          - 'DownloadString('
+          - 'Invoke-Expression'
+          - 'IEX('
+
+      selection_powershell_weak:
+        Image|endswith:
+          - '\powershell.exe'
+          - '\pwsh.exe'
+        CommandLine|contains:
           - '-ExecutionPolicy Bypass'
           - '-ep bypass'
           - '-WindowStyle Hidden'
           - '-w hidden'
-          - 'DownloadString('
-          - 'Invoke-Expression'
-          - 'IEX('
 
       selection_cmd_arguments:
         Image|endswith:
@@ -377,7 +387,7 @@
           - '/c bitsadmin'
           - '/c certutil'
 
-      condition: (selection_interpreters and selection_suspicious_parents) or selection_powershell_arguments or selection_cmd_arguments
+      condition: selection_powershell_strong or (selection_interpreters and selection_suspicious_parents and (selection_powershell_weak or selection_cmd_arguments))
 
     falsepositives:
       - Legitimate Administrative Scripts
@@ -417,6 +427,9 @@
   File creation and subsequent execution should be correlated using the originating ProcessGuid, created file path, executed image or script path, and file hash when available.
   Script execution may require matching the created script path against interpreter command-line arguments or script telemetry instead of process Image.
   Approved administrative automation should be identified through validated baselines and narrowly scoped exclusions.
+  The Sigma rule distinguishes stronger PowerShell command-line indicators from weaker contextual indicators.
+  Weaker indicators require a suspicious parent-child relationship to generate an initial detection.
+  Parent-only interpreter execution events should remain available for broader SIEM behavioral correlation.
   High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
 
     - Process Creation Events
@@ -455,7 +468,7 @@
     -- Medium
 
   - Trigger:
-    -- Interpreter execution matches suspicious parent-child relationships or monitored command-line indicators
+    -- Interpreter execution matches monitored strong PowerShell command-line indicators or suspicious parent-child relationships combined with weaker monitored command-line indicators
 
   - Confidence:
     -- Low until additional suspicious behavior is established
@@ -512,10 +525,9 @@
 
   - Direct Sigma Coverage:
 
-    -- Suspicious Interpreter Execution Through Monitored Process Creation Events
-    -- Unusual Parent-Child Process Relationships
-    -- PowerShell Execution With Monitored Suspicious Arguments
-    -- CMD Execution With Monitored Suspicious Arguments
+    -- PowerShell Execution With Monitored Strong Command-Line Indicators
+    -- PowerShell Execution With Monitored Weak Indicators And Suspicious Parent Processes
+    -- CMD Execution With Monitored Suspicious Arguments And Suspicious Parent Processes
 
   - Correlated Coverage - Requires SIEM Implementation:
 
@@ -544,3 +556,6 @@
     -- Malicious Activity Outside Correlation Windows
     -- Encrypted Network Traffic Without Inspection
     -- Attacker Infrastructure Without Known Threat Intelligence
+    -- Suspicious Interpreter Execution With Unmonitored Or Benign-Looking Command-Line Arguments
+    -- Suspicious Parent-Child Interpreter Relationships Without Additional Monitored Indicators
+    -- Malicious PowerShell Execution Using Weak Indicators Without A Monitored Suspicious Parent
