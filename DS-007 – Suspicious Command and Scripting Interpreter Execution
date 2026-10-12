@@ -1,0 +1,546 @@
+-TA0002 - Execution
+  -- T1059 - Command and Scripting Interpreter
+
+# THREAT DESCRIPTION
+
+  Adversaries may abuse command-line and scripting interpreters to execute malicious commands, scripts, or payloads on compromised Windows endpoints.
+  Commonly abused interpreters include PowerShell, Windows Command Shell, Windows Script Host, and other scripting environments available on the target system.
+  Attackers may invoke these interpreters through compromised applications, malicious documents, browser-initiated workflows, downloaded files, or existing processes.
+  Suspicious execution may involve encoded or obfuscated commands, remote script retrieval, execution from user-writable directories, or unusual parent-child process relationships.
+  Interpreters may subsequently initiate network connections, create or modify files, launch additional processes, or establish persistence mechanisms.
+  These behaviors may facilitate payload execution, defense evasion, credential access, lateral movement, or command and control activity.
+  Legitimate administrative and automation activities may exhibit similar characteristics, making behavioral correlation essential for reliable detection.
+
+# THREAT MODEL
+
+  - Attacker Goal:
+      Execute malicious commands or scripts through legitimate interpreters while blending with normal endpoint activity
+
+  - Prerequisites:
+      Ability to trigger command or script execution on the target endpoint
+      Access to an available command or scripting interpreter
+      Sufficient permissions for the intended malicious operations
+
+  - Potential Impact:
+      Malicious Command Execution
+      Payload Execution
+      Defense Evasion
+      Credential Access
+      Persistence Establishment
+      Lateral Movement
+      Command and Control
+      Further Endpoint Compromise
+
+# TELEMETRY SOURCES
+
+  - Endpoint Detection and Response Telemetry
+  - Process Creation Events
+  - PowerShell Script Block Logs
+  - PowerShell Module Logs
+  - Windows Script Host Telemetry
+  - Network Connection Events
+  - DNS Logs
+  - Proxy Logs
+  - File Creation Events
+  - Registry Modification Events
+  - Windows Event Logs
+  - Threat Intelligence
+
+# DETECTION TELEMETRY
+
+  - Process Creation Events
+
+      -- Relevant Fields:
+          --- Image
+          --- CommandLine
+          --- ParentImage
+          --- ParentCommandLine
+          --- ProcessId
+          --- ProcessGuid
+          --- ParentProcessGuid
+          --- User
+          --- IntegrityLevel
+          --- EventTimestamp
+
+      * Example:
+          ** ParentImage: C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE
+          ** Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+          ** CommandLine: powershell.exe -NoProfile -EncodedCommand <EncodedContent>
+
+  - PowerShell Events
+
+      -- Relevant Fields:
+          --- ScriptBlockText
+          --- ScriptBlockId
+          --- CommandLine
+          --- User
+          --- ProcessId
+          --- EventTimestamp
+
+      * Example:
+          ** ScriptBlockText: Invoke-WebRequest -Uri https://example.net/script.ps1 -OutFile C:\Users\User\AppData\Local\Temp\script.ps1
+
+  - Network Connection Events
+
+      -- Relevant Fields:
+          --- SourceIp
+          --- DestinationIp
+          --- DestinationPort
+          --- ProcessName
+          --- ProcessId
+          --- ProcessGuid
+          --- Protocol
+          --- EventTimestamp
+
+      * Example:
+          ** ProcessName: powershell.exe
+          ** DestinationIp: 198.51.100.25
+          ** DestinationPort: 443
+          ** Protocol: TCP
+
+  - File Creation Events
+
+      -- Relevant Fields:
+          --- Image
+          --- ProcessGuid
+          --- TargetFilename
+          --- FileHash
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** Image: powershell.exe
+          ** TargetFilename: C:\Users\User\AppData\Local\Temp\payload.exe
+
+  - Registry Modification Events
+
+      -- Relevant Fields:
+          --- Image
+          --- ProcessGuid
+          --- TargetObject
+          --- Details
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** Image: powershell.exe
+          ** TargetObject: HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Updater
+
+  - Child Process Events
+
+      -- Relevant Fields:
+          --- ParentImage
+          --- ParentProcessGuid
+          --- Image
+          --- CommandLine
+          --- ProcessGuid
+          --- User
+          --- EventTimestamp
+
+      * Example:
+          ** ParentImage: powershell.exe
+          ** Image: C:\Users\User\AppData\Local\Temp\payload.exe
+
+# CORRELATION LOGIC
+
+  - Objective:
+
+    -- Identify suspicious command or script interpreter execution associated with unusual parent processes, suspicious command-line arguments, remote content retrieval, payload execution, or other malicious follow-on activity.
+
+  - Correlation Criteria:
+
+    -- Scenario 1:
+      --- Browser, Office application, PDF reader, or other unusual parent process launches a command or scripting interpreter
+
+    -- Scenario 2:
+      --- Command or scripting interpreter executes encoded or obfuscated commands
+
+    -- Scenario 3:
+      --- Interpreter executes scripts from temporary or user-writable directories
+
+    -- Scenario 4:
+      --- Interpreter retrieves remote scripts or executable content from an unusual external destination
+
+    -- Scenario 5:
+      --- Interpreter establishes network connections to malicious or strongly suspicious infrastructure
+
+    -- Scenario 6:
+      --- Interpreter creates an executable or script file and subsequently launches or executes that same file
+
+    -- Scenario 7:
+      --- Interpreter launches additional command or scripting interpreters in an unusual execution chain
+
+    -- Scenario 8:
+      --- Interpreter modifies registry locations commonly associated with persistence
+
+    -- Scenario 9:
+      --- Interpreter executes suspicious commands shortly after a downloaded file or document is opened
+
+    -- Scenario 10:
+      --- Interpreter execution is followed by multiple suspicious activities involving file creation, network communication, or additional process execution
+
+    -- Suspicious Execution Identification:
+
+      --- Unusual parent-child process relationship
+      --- Encoded or obfuscated command execution
+      --- Script execution from suspicious directories
+      --- Remote script or payload retrieval
+      --- Connections to untrusted external infrastructure
+      --- Suspicious executable or script file creation
+      --- Subsequent execution of the same created or downloaded content
+      --- Unusual interpreter-to-interpreter execution chains
+      --- Persistence-related registry modification
+      --- Multiple suspicious activities associated with the same execution chain
+
+    - Correlation Keys:
+
+      -- Host Identifier + ProcessGuid + Event Timestamp for process activity correlation
+      -- ParentProcessGuid for parent-child execution chains
+      -- ProcessGuid for network, file, and registry correlation when available
+      -- ProcessId, Host Identifier, Process Start Time, and Event Timestamp when ProcessGuid is unavailable
+      -- File creation ProcessGuid linked to the originating interpreter process
+      -- Created file path matched to the subsequently executed executable image or script path
+      -- File hash used as supporting evidence when available and reliably collected
+      -- Script execution identified through interpreter CommandLine or script telemetry when the script path does not appear in the child process Image
+      -- Destination IP Address, Remote URL, and File Path as supporting correlation attributes
+      -- Process identifiers should not be correlated across unrelated process lifetimes
+
+    - Time Window:
+
+      -- Parent-child relationships identified through process lineage using ProcessGuid and ParentProcessGuid when available
+      -- 5 Minutes for interpreter execution followed by network or file activity
+      -- 10 Minutes for creation or download of a file followed by execution of the same file
+      -- Extended observation windows for delayed execution or persistence activity
+
+    - Expected Behavior:
+
+      -- Legitimate interpreters are frequently used by administrators, developers, enterprise management tools, and automated applications.
+      -- Authorized script execution should generally originate from expected processes, users, paths, and management workflows.
+      -- Suspicious parent-child relationships or encoded commands should be evaluated with additional behavioral evidence before being classified as malicious.
+
+    - Detection Outcome:
+
+      -- Medium to High-confidence indication of suspicious command or script execution, with increased confidence when multiple malicious behaviors are correlated.
+
+# INVESTIGATION ENRICHMENT
+
+  - Asset Context
+
+      -- Endpoint Name
+      -- Assigned User
+      -- Operating System
+      -- Asset Criticality
+
+  - Process Context
+
+      -- Interpreter Name
+      -- Interpreter Path
+      -- Parent Process
+      -- Parent Command Line
+      -- Process Command Line
+      -- Process Identifier
+      -- Process GUID
+      -- Parent Process GUID
+      -- Integrity Level
+      -- Digital Signature
+      -- File Hash
+
+  - Script Context
+
+      -- Script Path
+      -- Script Content
+      -- Script Hash
+      -- Script Block Identifier
+      -- Encoding Indicators
+      -- Obfuscation Indicators
+
+  - Network Context
+
+      -- Destination IP Address
+      -- Destination Domain
+      -- ASN
+      -- Reputation Score
+      -- Network Protocol
+      -- Connection Frequency
+
+  - File Context
+
+      -- Created File Path
+      -- File Hash
+      -- File Type
+      -- Digital Signature
+      -- Subsequent Execution Activity
+
+  - User Context
+
+      -- Username
+      -- User Privileges
+      -- Administrative Role
+      -- Expected Administrative Activity
+
+  - Threat Intelligence
+
+      -- Known Malicious Domains
+      -- Known Malicious IP Addresses
+      -- Known Malware Hashes
+      -- Known Malicious Script Indicators
+
+# DETECTION STRATEGY
+
+  Detection relies on identifying command and scripting interpreter execution associated with unusual parent processes or suspicious command-line arguments.
+  Process creation telemetry provides the initial detection signal, while PowerShell script telemetry, network connections, file creation, child process execution, and registry modifications provide supporting behavioral evidence.
+  The strategy prioritizes suspicious execution chains rather than treating all interpreter activity as malicious.
+  Correlation across the initiating process and subsequent interpreter activity increases confidence and helps distinguish malicious execution from legitimate administrative automation.
+  High-confidence alerts require stronger evidence such as confirmed malicious infrastructure, execution of a known malicious payload, or multiple related suspicious behaviors.
+
+# DETECTION LOGIC NOTES
+
+  - Command and scripting interpreters are legitimate Windows components used extensively by administrators and applications.
+  - Interpreter execution alone does not indicate malicious activity.
+  - Unusual parent-child process relationships are useful detection signals but require contextual validation.
+  - Encoded commands may be used legitimately by administrative tools and automation frameworks.
+  - Obfuscated commands should be distinguished from ordinary encoded command arguments.
+  - PowerShell command-line telemetry may not expose script content executed from files or interactive sessions.
+  - PowerShell Script Block Logging can provide additional visibility into executed script content when enabled.
+  - Network connections should be correlated with the correct interpreter process instance.
+  - File creation and subsequent execution should be linked through process identity, file path, and available file hashes.
+  - Executed scripts may appear in an interpreter's CommandLine or script telemetry rather than as the Image of a newly created process.
+  - ProcessId alone is insufficient for reliable long-term correlation because identifiers may be reused.
+  - ProcessGuid and ParentProcessGuid should be preferred when available.
+  - Correlation should distinguish direct parent-child relationships from multi-level process ancestry, as suspicious follow-on activity may originate from descendant processes rather than the initial interpreter.
+  - Script execution from user-writable directories is suspicious only when supported by additional context.
+  - Interpreter-to-interpreter execution chains may occur during legitimate administration.
+  - Known administrative automation and approved software management activity should be evaluated before applying exclusions.
+  - Exclusions should be narrowly scoped to validated benign behaviors rather than broadly excluding trusted interpreter binaries.
+  - Detection quality depends on endpoint telemetry coverage, command-line visibility, and availability of supporting events.
+
+# SIGMA
+
+  - Process Creation
+
+    title: Suspicious Command And Script Interpreter Execution
+    id: 2c8e1b4f-73d9-4a60-9f52-86b3d0c14e27
+    status: experimental
+
+    description: >
+      Detects command and scripting interpreters launched by
+      unusual parent processes or using suspicious command-line
+      arguments that may indicate malicious execution activity.
+
+    logsource:
+      category: process_creation
+      product: windows
+
+    detection:
+
+      selection_interpreters:
+        Image|endswith:
+          - '\powershell.exe'
+          - '\pwsh.exe'
+          - '\cmd.exe'
+          - '\wscript.exe'
+          - '\cscript.exe'
+
+      selection_suspicious_parents:
+        ParentImage|endswith:
+          - '\WINWORD.EXE'
+          - '\EXCEL.EXE'
+          - '\POWERPNT.EXE'
+          - '\OUTLOOK.EXE'
+          - '\AcroRd32.exe'
+          - '\Acrobat.exe'
+          - '\chrome.exe'
+          - '\msedge.exe'
+          - '\firefox.exe'
+
+      selection_powershell_arguments:
+        Image|endswith:
+          - '\powershell.exe'
+          - '\pwsh.exe'
+        CommandLine|contains:
+          - '-EncodedCommand'
+          - '-enc '
+          - '-ExecutionPolicy Bypass'
+          - '-ep bypass'
+          - '-WindowStyle Hidden'
+          - '-w hidden'
+          - 'DownloadString('
+          - 'Invoke-Expression'
+          - 'IEX('
+
+      selection_cmd_arguments:
+        Image|endswith:
+          - '\cmd.exe'
+        CommandLine|contains:
+          - '/c powershell'
+          - '/c pwsh'
+          - '/c bitsadmin'
+          - '/c certutil'
+
+      condition: (selection_interpreters and selection_suspicious_parents) or selection_powershell_arguments or selection_cmd_arguments
+
+    falsepositives:
+      - Legitimate Administrative Scripts
+      - Enterprise Management Tools
+      - Authorized Automation
+      - Software Installation Workflows
+      - Developer Activity
+      - Approved Application Integrations
+
+    level: medium
+
+    tags:
+      - attack.execution
+      - attack.t1059
+
+# LEVEL CONSIDERATIONS
+
+  The Sigma rule provides Medium-priority detection of potentially suspicious command or scripting interpreter activity.
+  A single unusual parent-child relationship or suspicious command-line argument does not independently confirm malicious execution.
+  Legitimate administrative tools and enterprise automation may generate similar events.
+  The Sigma rule should be treated as an initial detection signal rather than proof of compromise.
+  Confidence increases when suspicious interpreter execution is correlated with remote payload retrieval, malicious network destinations, suspicious file creation, subsequent payload execution, or persistence-related changes.
+  High-confidence alerts should require reliable evidence of malicious activity or multiple related suspicious behaviors.
+  Consequently, Sigma severity is Medium while correlated alert severity may range from High to Critical depending on observed behavior.
+
+# IMPLEMENTATION NOTES
+
+  The Sigma rule provides an initial process creation detection layer for suspicious interpreter execution.
+  Organizations should adapt the interpreter list, parent process list, and command-line indicators according to their environment.
+  The detection primarily covers Windows command and scripting interpreters explicitly monitored by the Sigma rule and does not provide complete coverage of all T1059 sub-techniques.
+  PowerShell Script Block Logging should be enabled where operationally appropriate to improve visibility into executed script content.
+  PowerShell argument detection requires command-line normalization and supporting Script Block telemetry to identify variants not covered by the exact Sigma string matches.
+  Command-line arguments may be abbreviated, reordered, obfuscated, or embedded in scripts, reducing the effectiveness of exact string matching.
+  Process creation telemetry should include full command lines and stable process identifiers when supported.
+  ProcessGuid and ParentProcessGuid should be used to reconstruct execution chains.
+  Network, file creation, and registry modification events should be correlated with the originating interpreter process whenever possible.
+  File creation and subsequent execution should be correlated using the originating ProcessGuid, created file path, executed image or script path, and file hash when available.
+  Script execution may require matching the created script path against interpreter command-line arguments or script telemetry instead of process Image.
+  Approved administrative automation should be identified through validated baselines and narrowly scoped exclusions.
+  High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
+
+    - Process Creation Events
+    - PowerShell Events
+    - Network Connection Events
+    - File Creation Events
+    - Registry Modification Events
+    - DNS / Proxy Events
+    - Threat Intelligence
+
+  using:
+
+    - Host Identifier
+    - ProcessGuid
+    - ParentProcessGuid
+    - Process Identifier
+    - Process Start Time
+    - Event Timestamp
+    - Username
+    - Process Image
+    - Parent Process Image
+    - Command Line
+    - Remote URL
+    - Destination IP Address
+    - File Path
+    - File Hash
+
+  to determine whether interpreter execution is associated with malicious command execution, payload retrieval, suspicious process chains, persistence activity, or command and control communication.
+
+# ALERT DEFINITION
+
+  - Alert Name:
+    -- Suspicious Command Or Script Interpreter Execution
+
+  - Severity:
+    -- Medium
+
+  - Trigger:
+    -- Interpreter execution matches suspicious parent-child relationships or monitored command-line indicators
+
+  - Confidence:
+    -- Low until additional suspicious behavior is established
+
+  - Alert Name:
+    -- Suspicious Interpreter With Remote Payload Retrieval
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious interpreter execution correlated with retrieval of executable or script content from an unusual or malicious remote destination
+
+  - Confidence:
+    -- Medium to High depending on destination reputation and execution context
+
+  - Alert Name:
+    -- Suspicious Interpreter Followed By Payload Execution
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious interpreter creates or retrieves executable content that is subsequently executed on the endpoint
+
+  - Confidence:
+    -- High when file and process activity are reliably correlated
+
+  - Alert Name:
+    -- Suspicious Interpreter With Persistence Activity
+
+  - Severity:
+    -- High
+
+  - Trigger:
+    -- Suspicious interpreter execution correlated with unauthorized persistence-related registry modifications
+
+  - Confidence:
+    -- High when modifications are confirmed unauthorized
+
+  - Alert Name:
+    -- Interpreter Execution Associated With Confirmed Malicious Activity
+
+  - Severity:
+    -- Critical
+
+  - Trigger:
+    -- Suspicious interpreter execution correlated with confirmed malicious payloads, malicious infrastructure, or multiple strongly indicative malicious behaviors
+
+  - Confidence:
+    -- High
+
+# DETECTION COVERAGE
+
+  - Direct Sigma Coverage:
+
+    -- Suspicious Interpreter Execution Through Monitored Process Creation Events
+    -- Unusual Parent-Child Process Relationships
+    -- PowerShell Execution With Monitored Suspicious Arguments
+    -- CMD Execution With Monitored Suspicious Arguments
+
+  - Correlated Coverage - Requires SIEM Implementation:
+
+    -- Suspicious Interpreter Execution Chains
+    -- Potential Remote Script Or Payload Retrieval
+    -- Suspicious Network Connections Following Interpreter Execution
+    -- Suspicious File Creation And Subsequent Execution Of The Same File
+    -- Potential Persistence-Related Registry Modifications
+    -- Multi-Stage Suspicious Command And Script Execution
+    -- Potential Malicious Command And Script Execution
+
+  - Potential Gaps:
+
+    -- Interpreter Execution Without Observable Process Creation Events
+    -- PowerShell Script Execution Without Visible Command-Line Indicators
+    -- Missing PowerShell Script Block Telemetry
+    -- Obfuscated Or Unrecognized Command-Line Variants
+    -- Interpreter Execution Through Unmonitored Scripting Engines
+    -- Legitimate-Looking Parent-Child Process Relationships
+    -- Trusted Administrative Tools Abused For Malicious Execution
+    -- Missing Network Telemetry
+    -- Missing File Creation Events
+    -- Missing Registry Modification Events
+    -- Incomplete Process Ancestry
+    -- Missing Or Inconsistent Process Identifiers
+    -- Malicious Activity Outside Correlation Windows
+    -- Encrypted Network Traffic Without Inspection
+    -- Attacker Infrastructure Without Known Threat Intelligence
