@@ -1,4 +1,4 @@
--TA0002 - Execution
+- TA0002 - Execution
   -- T1197 - BITS Jobs
 
 # THREAT DESCRIPTION
@@ -332,6 +332,11 @@
   - File transfer activity and subsequent process execution significantly increase detection confidence.
   - BITS job identifiers should be used whenever available to correlate job lifecycle events.
   - Network connections alone may not reliably identify the originating BITS job.
+  - Generic BITS job creation or modification commands do not independently trigger the optimized Sigma rule.
+  - The optimized Sigma rule prioritizes notification command configuration and monitored BITS transfer commands referencing suspicious local paths.
+  - Suspicious local paths are contextual indicators and do not independently confirm malicious BITS activity.
+  - Malicious BITS jobs using legitimate-looking destination paths may not match the optimized Sigma rule.
+  - BITS notification command configuration requires additional validation to determine whether the configured command is malicious.
   - Detection quality depends on BITS logging configuration, endpoint visibility, and network telemetry.
 
 # SIGMA
@@ -343,10 +348,9 @@
     status: experimental
 
     description: >
-      Detects command-line activity associated with BITS job
-      creation, modification, or suspicious notification
-      command configuration that may indicate abuse of
-      Background Intelligent Transfer Service.
+      Detects suspicious BITS command-line activity involving
+      notification command configuration or monitored BITS
+      transfer commands referencing suspicious local paths.
 
     logsource:
       category: process_creation
@@ -358,24 +362,33 @@
         Image|endswith:
           - '\bitsadmin.exe'
 
-        CommandLine|contains:
-          - '/create'
-          - '/addfile'
-          - '/addfilewithranges'
-          - '/setnotifycmdline'
-          - '/setcustomheaders'
-
       selection_powershell:
         Image|endswith:
           - '\powershell.exe'
           - '\pwsh.exe'
 
+      selection_bitsadmin_notify:
+        CommandLine|contains:
+          - '/setnotifycmdline'
+
+      selection_bitsadmin_transfer:
+        CommandLine|contains:
+          - '/addfile'
+          - '/addfilewithranges'
+
+      selection_powershell_transfer:
         CommandLine|contains:
           - 'Start-BitsTransfer'
           - 'Add-BitsFile'
           - 'Set-BitsTransfer'
 
-      condition: selection_bitsadmin or selection_powershell
+      selection_suspicious_paths:
+        CommandLine|contains:
+          - '\AppData\Local\Temp\'
+          - '\Windows\Temp\'
+          - '\Users\Public\'
+
+      condition: (selection_bitsadmin and selection_bitsadmin_notify) or (selection_bitsadmin and selection_bitsadmin_transfer and selection_suspicious_paths) or (selection_powershell and selection_powershell_transfer and selection_suspicious_paths)
 
     falsepositives:
       - Legitimate Windows Administration
@@ -415,6 +428,10 @@
   BITS notification command configuration must be distinguished from actual notification command execution.
   Confirmation of notification command execution requires process creation telemetry correlated with the relevant BITS service instance, job state, and configured notification command.
   The separate detection of suspicious BITS service child process execution is outside the Sigma scope of this Detection Story.
+  The Sigma rule requires either bitsadmin.exe notification command configuration or monitored BITS transfer commands referencing suspicious local paths.
+  Generic BITS job creation and modification commands remain relevant for broader SIEM correlation but do not directly trigger the optimized Sigma rule.
+  BITS job metadata should be used to identify suspicious remote destinations, transferred file types, notification commands, and unusual job behavior independently of the initial Sigma match.
+  SIEM correlation must retain access to underlying BITS and process telemetry rather than relying exclusively on events matching the Sigma rule.
   High-confidence alert generation should be performed through SIEM-side enrichment and correlation between:
 
     - BITS Job Events
@@ -456,7 +473,7 @@
     -- Medium
 
   - Trigger:
-    -- Process executes monitored BITS job creation or modification commands
+    -- Process executes monitored BITS notification configuration commands or BITS transfer commands referencing monitored suspicious local paths
 
   - Confidence:
     -- Low until additional suspicious job context is established
@@ -523,19 +540,21 @@
 
 # DETECTION COVERAGE
 
-  - Detected:
+  - Direct Sigma Coverage:
 
-    -- BITS Job Creation Through Monitored Command-Line Tools
-    -- BITS Job Modification Through Monitored Command-Line Tools
-    -- Suspicious BITS Notification Command Configuration Through Available Job Metadata
-    -- BITS Job Lifecycle Activity When Telemetry Is Available
+    -- BITS Notification Command Configuration Through bitsadmin.exe
+    -- BITS Transfer Commands Referencing Monitored Suspicious Local Paths
+    -- Suspicious BITS Command-Line Activity Matching The Defined Sigma Conditions
+
+  - Correlated Coverage - Requires SIEM Implementation:
+
+    -- BITS Job Lifecycle Activity Through Available Job Telemetry
     -- COM-Based BITS Job Activity Through Available Job Telemetry
-    -- Potentially Malicious Background File Transfers
-    -- BITS Job Communication With Suspicious Remote Destinations
-    -- Suspicious Recurring BITS Transfer Activity
-    -- Suspicious Long-Lived BITS Jobs
-    -- BITS-Based Payload Delivery
-    -- Payload Execution Following BITS Transfers
+    -- BITS Jobs With Suspicious Remote Destinations
+    -- Suspicious Notification Command Configuration Through Job Metadata
+    -- BITS Job Completion Or Error Followed By Notification Command Execution
+    -- Suspicious Long-Lived Or Recurring BITS Jobs
+    -- BITS-Based Payload Delivery And Subsequent Execution
     -- Potential BITS-Based Command And Control Activity
 
   - Potential Gaps:
@@ -554,3 +573,7 @@
     -- Missing Windows Service Attribution
     -- Command And Control Activity Without Distinctive Network Patterns
     -- BITS Service Child Process Execution Without Dedicated Detection Logic
+    -- Generic BITS Job Creation Or Modification Without Monitored Suspicious Indicators
+    -- Malicious BITS Transfers Using Unmonitored Or Legitimate-Looking Local Paths
+    -- BITS Transfers Using Environment Variables Or Unrecognized Path Representations
+    -- Malicious Notification Commands Configured Through Interfaces Not Covered By The Sigma Rule
